@@ -1,0 +1,5 @@
+{
+  "name": "git-graph",
+  "owner": { "name": "federicoxella-space" },
+  "plugins": [{ "name": "git-graph", "source": "./" }]
+}

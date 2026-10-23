@@ -8,6 +8,22 @@ Mod per Claude Code che mostra, in un pannello accanto alla chat, il grafico git
 - Aggiornamento automatico (polling ogni 4 s e dopo i comandi `git` eseguiti da Claude), più il pulsante "Aggiorna".
 - Nel terminale CLI ricade su una versione testuale.
 
+## Installazione
+
+Dal prompt di una sessione Claude Code nel terminale:
+
+```
+/plugin install git-graph --marketplace federicoxella-space/git-graph
+```
+
+Da shell:
+
+```bash
+claude plugin install git-graph --marketplace federicoxella-space/git-graph
+```
+
+Nell'app desktop: + accanto al prompt → Plugins → Add marketplace con `federicoxella-space/git-graph`, poi Add plugin.
+
 ## Comando
 
 ```
