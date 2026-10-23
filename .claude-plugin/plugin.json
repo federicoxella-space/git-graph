@@ -1,0 +1,6 @@
+{
+  "name": "git-graph",
+  "version": "0.1.0",
+  "description": "Pannello con il grafico git del repository della cartella corrente",
+  "types": "./types/index.d.ts"
+}
