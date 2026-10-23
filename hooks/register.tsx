@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Filters, Graph } from '../types'
 import { LOG_FORMAT, age, layout, parseLog } from './git'
-import { graphSvg, messageSvg, visibleRows } from './svg'
+import { BAND_H, CELL_W, bandSvg, graphSvg, messageSvg, visibleRows } from './svg'
 
 const PANE = 'git-graph'
 const TITLE = 'Git graph'
@@ -13,11 +13,12 @@ const MAX_COMMITS = 2000
 /** Loads the next STEP once the window comes this close to the end. */
 const PREFETCH = 20
 const POLL_MS = 4000
-/** Pixels per cell of the desktop's code font: the pane is measured in cells. */
-const CELL_W = 7.8
+/** Pixels per row of the desktop's code font: the pane is measured in cells. */
 const CELL_H = 19
 /** Cells kept under the drawing for the refresh button. */
 const CONTROLS = 2
+/** Pixels kept beside the band for its close button, as the desktop draws it. */
+const BAND_BUTTON_W = 32
 
 const graph = atom({ plugin: 'git-graph', key: 'graph' } as const, { kind: 'idle' } as Graph)
 const offset = atom({ plugin: 'git-graph', key: 'offset' } as const, 0)
@@ -28,6 +29,7 @@ const filters = atom({ plugin: 'git-graph', key: 'filters' } as const, {
   since: null,
 } as Filters)
 const isLoading = atom({ plugin: 'git-graph', key: 'isLoading' } as const, false)
+const isBandHidden = atom({ plugin: 'git-graph', key: 'isBandHidden' } as const, false)
 
 type $ = EngineInterface
 
@@ -80,15 +82,16 @@ async function scan($: $): Promise<Graph> {
     ...(f.since !== null ? [`--since=${f.since}`] : []),
   ]
 
-  const [branch, counts, remotes, refs, log, sig] = await Promise.all([
+  const [branch, counts, remotes, refs, log, sig, status] = await Promise.all([
     git('rev-parse', '--abbrev-ref', 'HEAD'),
     git('rev-list', '--left-right', '--count', '@{u}...HEAD'),
     git('remote'),
     git('for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes', 'refs/tags'),
     git(...logArgs),
     git('show-ref', '--head'),
+    git('status', '--porcelain'),
   ])
-  signature = cwd + sig.stdout
+  signature = cwd + sig.stdout + status.stdout
 
   const remoteNames = remotes.stdout.split(/\r?\n/).filter(r => r.length > 0)
   const refNames = refs.stdout.split(/\r?\n/).filter(r => r.length > 0 && !r.endsWith('/HEAD'))
@@ -114,6 +117,7 @@ async function scan($: $): Promise<Graph> {
     branches: refNames.filter(r => r.startsWith('refs/heads/')).length,
     remotes: remoteNames.length,
     tags: refNames.filter(r => r.startsWith('refs/tags/')).length,
+    dirty: status.stdout.split(/\r?\n/).filter(l => l.length > 0).length,
   }
 }
 
@@ -127,8 +131,8 @@ async function loadMore($: $): Promise<void> {
 async function poll($: $): Promise<void> {
   if (running !== null) return
   const cwd = await $.session.cwd()
-  const sig = await $.process.run(['git', 'show-ref', '--head'], { cwd, timeoutMs: 10000 })
-  if (cwd + sig.stdout !== signature) await load($)
+  const [sig, status] = await Promise.all([run($, cwd, ['show-ref', '--head']), run($, cwd, ['status', '--porcelain'])])
+  if (cwd + sig.stdout + status.stdout !== signature) await load($)
 }
 
 function run($: $, cwd: string, args: string[]) {
@@ -154,6 +158,7 @@ export const register: Register = on => {
     await update($, filters, () => f)
     await update($, limit, () => FIRST_LOAD)
     await update($, offset, () => 0)
+    await update($, isBandHidden, () => false)
     await $.ui.open({ id: PANE, title: TITLE })
     void load($)
 
@@ -182,6 +187,45 @@ export const register: Register = on => {
 
     return {}
   }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const g = await read($, graph)
+    if (g.kind !== 'ok' || e.props.hasSurvey || (await read($, isBandHidden))) return next(e)
+
+    const nowSeconds = Math.floor((await $.clock.now()) / 1000)
+    const ui = $.ui.resolve(e)
+    const { Box, Text, Button } = ui
+    // The icon is the Button's own label: a desktop draws every Button as its
+    // native control, so the icon goes where that control is, not under it.
+    const hide = (
+      <Button key="band-hide" plain onPress={() => update($, isBandHidden, () => true)}>
+        <Text dimColor>✕</Text>
+      </Button>
+    )
+
+    if (e.surface === 'terminal' || !('Svg' in ui)) {
+      return (
+        <Box flexDirection="row">
+          <Text>{bandText(g, nowSeconds)} </Text>
+          {hide}
+        </Box>
+      )
+    }
+
+    const Svg = ui.Svg
+    const width = Math.max(320, Math.floor(e.props.bodyColumns * CELL_W) - BAND_BUTTON_W)
+
+    // The row takes the drawing's height; the Button's column stretches to it
+    // and centers the Button, so it sits on the band's middle line.
+    return (
+      <Box flexDirection="row" alignItems="stretch">
+        <Svg source={bandSvg(width, g, nowSeconds)} alt={bandText(g, nowSeconds)} width={width} height={BAND_H} />
+        <Box flexDirection="column" justifyContent="center" alignItems="center" flexGrow={1}>
+          {hide}
+        </Box>
+      </Box>
+    )
+  })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const g = await read($, graph)
@@ -266,6 +310,15 @@ function describe(f: Filters): string {
   ].filter(p => p !== null)
 
   return parts.length > 0 ? ` (${parts.join(', ')})` : ''
+}
+
+function bandText(g: Extract<Graph, { kind: 'ok' }>, nowSeconds: number): string {
+  const head = g.rows.find(r => r.refs.some(ref => ref.kind === 'head')) ?? g.rows[0]!
+  const sync = g.ahead === null || g.behind === null ? '—' : `↑${g.ahead} ↓${g.behind}`
+  const last =
+    (g.behind ?? 0) > 0 ? `${g.behind} commit da scaricare` : `${head.hash} ${head.subject} ${age(head.time, nowSeconds)}`
+
+  return `[${g.branch}] ${sync} · ${last} · ${g.dirty}Δ`
 }
 
 function altText(g: Graph): string {

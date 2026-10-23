@@ -247,3 +247,69 @@ function refBadge(
     next: at + w + 6,
   }
 }
+
+export const BAND_H = 40
+/** Pixels per cell of the desktop's code font: panes and bands are measured in cells. */
+export const CELL_W = 7.8
+
+/** The one-row band above the prompt: branch, sync, HEAD's commit, dirty files. */
+export function bandSvg(width: number, graph: Ok, nowSeconds: number): string {
+  const W = width
+  const H = BAND_H
+  const mid = 24
+  const head = graph.rows.find(r => r.refs.some(ref => ref.kind === 'head')) ?? graph.rows[0]!
+  const [stroke, light] = color(head.lane)
+
+  let x = 16
+  const branch = cut(graph.branch, 24)
+  const bw = branch.length * SMALL_CHAR + 16
+
+  let out =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
+    `<style>text{font-family:ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace}</style>` +
+    `<defs><filter id="g" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">` +
+    `<feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
+    `<polygon id="hx" points="0,-6 5.2,-3 5.2,3 0,6 -5.2,3 -5.2,-3"/></defs>` +
+    `<rect width="${W}" height="${H}" rx="8" fill="${BG}"/>` +
+    `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="8" fill="none" stroke="${LINE}"/>` +
+    `<rect x="${n(x)}" y="11" width="${n(bw)}" height="18" rx="2" fill="${stroke}" fill-opacity="0.12" stroke="${stroke}" filter="url(#g)"/>` +
+    `<text x="${n(x + bw / 2)}" y="${mid}" fill="${light}" font-size="11" text-anchor="middle">${esc(branch)}</text>`
+  x += bw + 12
+
+  const ahead = graph.ahead ?? 0
+  const behind = graph.behind ?? 0
+  const sync =
+    graph.ahead === null || graph.behind === null
+      ? `<tspan fill="${MUTED}">—</tspan>`
+      : `<tspan fill="${ahead > 0 ? '#22D3EE' : behind > 0 ? MUTED : '#34D399'}">↑${ahead}</tspan>` +
+        `<tspan fill="${behind > 0 ? '#FB923C' : ahead > 0 ? MUTED : '#34D399'}"> ↓${behind}</tspan>`
+  out += `<text x="${n(x)}" y="${mid}" font-size="11">${sync}</text>`
+  x += 6 * SMALL_CHAR + 12
+
+  const right = W - 16
+  const dirtyX = right - 6 * SMALL_CHAR - 12
+  out +=
+    `<text x="${right}" y="${mid}" fill="${MUTED}" font-size="11" text-anchor="end">` +
+    `<tspan fill="${graph.dirty > 0 ? TAG[0] : '#34D399'}">●</tspan> ${graph.dirty}Δ</text>` +
+    `<line x1="${n(dirtyX)}" y1="12" x2="${n(dirtyX)}" y2="28" stroke="${LINE}"/>` +
+    `<line x1="${n(x)}" y1="12" x2="${n(x)}" y2="28" stroke="${LINE}"/>`
+  x += 18
+
+  if (behind > 0) {
+    const room = Math.floor((dirtyX - 12 - x) / CHAR)
+    out += `<text x="${n(x)}" y="${mid}" fill="#FB923C" font-size="12">${esc(cut(`${behind} commit da scaricare`, room))}</text>`
+  } else {
+    const ageX = dirtyX - 12
+    out +=
+      `<use href="#hx" x="${n(x)}" y="20" fill="${BG}"/>` +
+      `<use href="#hx" x="${n(x)}" y="20" fill="${stroke}" fill-opacity="0.18" stroke="${stroke}" stroke-width="1.5"/>` +
+      `<circle cx="${n(x)}" cy="20" r="2" fill="${light}" filter="url(#g)"/>` +
+      `<text x="${n(x + 16)}" y="${mid}" fill="#5B6578" font-size="12">${head.hash}</text>` +
+      `<text x="${n(ageX)}" y="${mid}" fill="${MUTED}" font-size="11" text-anchor="end">${age(head.time, nowSeconds)}</text>`
+    const subjectX = x + 16 + 8 * CHAR
+    const room = Math.floor((ageX - 3 * SMALL_CHAR - 12 - subjectX) / CHAR)
+    out += `<text x="${n(subjectX)}" y="${mid}" fill="#CBD5E1" font-size="12">${esc(cut(head.subject, room))}</text>`
+  }
+
+  return `${out}</svg>`
+}

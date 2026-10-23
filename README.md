@@ -8,6 +8,18 @@ Mod per Claude Code che mostra, in un pannello accanto alla chat, il grafico git
 - Aggiornamento automatico (polling ogni 4 s e dopo i comandi `git` eseguiti da Claude), più il pulsante "Aggiorna".
 - Nel terminale CLI ricade su una versione testuale.
 
+## Banda sopra il prompt
+
+Una riga compatta, sempre visibile anche quando il pannello è in un altro tab:
+
+| Voce | Significato |
+|---|---|
+| Badge del branch | branch corrente, nel colore della sua corsia |
+| `↑n ↓n` | commit da pushare / da scaricare rispetto all'upstream; `—` se non c'è upstream |
+| ⬡ hash, messaggio, età | il commit di HEAD; se sei indietro, al loro posto "N commit da scaricare" |
+| `● nΔ` | file in `git status`: verde se pulito, ambra se ci sono modifiche |
+| ✕ | nasconde la banda; `/gitgraph` la fa ricomparire |
+
 ## Installazione
 
 Dal prompt di una sessione Claude Code nel terminale:
