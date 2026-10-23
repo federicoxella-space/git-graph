@@ -10,6 +10,8 @@ export type Row = {
   hash: string
   subject: string
   initials: string
+  /** The palette index of the commit's author (authorColor), the same on every branch. */
+  authorColor: number
   /** Author time, unix seconds. */
   time: number
   refs: Ref[]

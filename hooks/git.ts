@@ -78,10 +78,25 @@ const MAIN = new Set(['main', 'master'])
  */
 export function branchColor(name: string): number {
   if (MAIN.has(name)) return 0
-  let hash = 0x811c9dc5
-  for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 0x01000193)
 
-  return 1 + ((hash >>> 0) % (COLORS - 1))
+  return 1 + (fnv(name) % (COLORS - 1))
+}
+
+/**
+ * An author's color, from their name alone: the same on every branch, so
+ * whose commit it is reads at a glance. Any of the COLORS, main's included:
+ * an author's chip is no lane.
+ */
+export function authorColor(name: string): number {
+  return fnv(`author:${name.trim().toLowerCase()}`) % COLORS
+}
+
+/** FNV-1a over the name's UTF-16 units: small, stable, well spread. */
+function fnv(text: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193)
+
+  return hash >>> 0
 }
 
 /** A lane no branch name reached: its color comes from its place instead. */
@@ -197,6 +212,7 @@ export function layout(
       hash: row.commit.hash.slice(0, 7),
       subject: row.commit.subject,
       initials: initials(row.commit.author),
+      authorColor: authorColor(row.commit.author),
       time: row.commit.time,
       refs: row.refs,
       lane: row.lane,

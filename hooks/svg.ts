@@ -177,9 +177,12 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
     const room = Math.floor((authorX - 12 - cx) / CHAR)
     text += `<text x="${n(cx)}" y="${ty}" class="m"${row.isMerge ? ` fill="${MUTED}"` : ''}>${esc(cut(row.subject, room))}</text>`
 
+    // The author's chip takes the author's color, not the branch's: one person
+    // reads the same on every branch.
+    const [own, ownLight] = color(row.authorColor)
     text +=
-      `<rect x="${authorX}" y="${y1 - 10}" width="26" height="20" rx="2" fill="${stroke}" fill-opacity="0.14" stroke="${stroke}" stroke-opacity="0.6"/>` +
-      `<text x="${authorX + 13}" y="${ty}" fill="${light}" class="b">${esc(row.initials)}</text>` +
+      `<rect x="${authorX}" y="${y1 - 10}" width="26" height="20" rx="2" fill="${own}" fill-opacity="0.14" stroke="${own}" stroke-opacity="0.6"/>` +
+      `<text x="${authorX + 13}" y="${ty}" fill="${ownLight}" class="b">${esc(row.initials)}</text>` +
       `<text x="${timeX}" y="${ty}" class="d" text-anchor="end">${age(row.time, frame.nowSeconds)}</text>`
 
     if (i < offset + visible - 1 && i < rows.length - 1) {

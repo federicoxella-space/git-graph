@@ -3,7 +3,7 @@
 Mod per Claude Code che mostra, in un pannello accanto alla chat, il grafico git del repository della cartella corrente.
 
 - Stile futuristico in toni caldi: corsie luminose, nodi esagonali, sfondo trasparente sul `#212121` di Claude Code.
-- Colori stabili per nome: `main`/`master` sempre ambra, ogni altro branch sempre lo stesso colore, anche dopo merge e rimozione (ricavato dal messaggio di merge).
+- Colori stabili per nome: `main`/`master` sempre ambra, ogni altro branch sempre lo stesso colore, anche dopo merge e rimozione (ricavato dal messaggio di merge). Le iniziali dell'autore hanno un colore fisso per persona, uguale su tutti i branch.
 - Geometria bilanciata: corsia ogni 24 px, riga ogni 40 px, curve identiche.
 - Virtual scroll: disegna solo le righe visibili. Carica 100 commit, poi +50 automaticamente vicino alla fine (tetto 2.000).
 - Aggiornamento automatico (polling ogni 4 s e dopo i comandi `git` eseguiti da Claude), più il pulsante "Aggiorna".

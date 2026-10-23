@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { COLORS, branchColor, layout, parseLog } from '../hooks/git'
+import { COLORS, authorColor, branchColor, layout, parseLog } from '../hooks/git'
 import { bandSvg, graphSvg } from '../hooks/svg'
 
 const F = '\x1f'
@@ -76,6 +76,16 @@ test('a branch keeps its color by name, whatever lane it takes', async () => {
   expect(rows[0]!.color).toBe(branchColor('feature/x'))
   expect(rows[1]!.lane).toBe(1)
   expect(rows[1]!.color).toBe(0)
+})
+
+test("an author's color is the same on every branch", async () => {
+  const { rows } = layout(parseLog(LOG), ['origin'])
+
+  // One author across main and feature/market: one color, whatever the lane.
+  expect(new Set(rows.map(r => r.authorColor)).size).toBe(1)
+  expect(rows[0]!.authorColor).toBe(authorColor('Federico Xella'))
+  expect(authorColor(' federico xella ')).toBe(authorColor('Federico Xella'))
+  expect(authorColor('Federico Xella')).toBeLessThan(COLORS)
 })
 
 test('a merge from a remote names the branch without its remote', async () => {
