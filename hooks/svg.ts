@@ -15,16 +15,20 @@ const HOST = '#212121'
 const LINE = '#3A3532'
 const MUTED = '#9A8F85'
 
-/** Lane colors, warm only: [stroke, light text]. The first is the accent too. */
+/**
+ * Branch colors, warm only: [stroke, light text], indexed by branchColor.
+ * 0 is main's amber and the accent; the rest keep away from it in hue or in
+ * lightness, so no other branch reads as main: no gold, orange or terracotta.
+ */
 const PALETTE: [string, string][] = [
-  ['#F59E0B', '#FCD34D'],
-  ['#F43F5E', '#FDA4AF'],
-  ['#F97316', '#FDBA74'],
-  ['#EAB308', '#FDE047'],
-  ['#EC4899', '#F9A8D4'],
-  ['#D97757', '#F0B9A3'],
-  ['#EF4444', '#FCA5A5'],
-  ['#C2410C', '#FB923C'],
+  ['#F59E0B', '#FCD34D'], // amber: main, master
+  ['#F43F5E', '#FDA4AF'], // rose
+  ['#D946EF', '#F5D0FE'], // fuchsia
+  ['#BE123C', '#FB7185'], // crimson, dark
+  ['#FDBA74', '#FFEDD5'], // peach, light
+  ['#F9A8D4', '#FCE7F3'], // pink, light
+  ['#C2410C', '#FDBA74'], // brick, dark
+  ['#A21CAF', '#F0ABFC'], // plum, dark
 ]
 const TAG: [string, string] = ['#E7C9A0', '#F5E6D3']
 
