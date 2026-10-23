@@ -57,21 +57,15 @@ function shell(frame: Frame, body: string): string {
     `<defs><filter id="g" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><feGaussianBlur stdDeviation="2.2" result="b"/>` +
     `<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
     `<polygon id="hx" points="0,-7 6.06,-3.5 6.06,3.5 0,7 -6.06,3.5 -6.06,-3.5"/>` +
-    `<linearGradient id="sc" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B" stop-opacity="0"/>` +
-    `<stop offset="0.5" stop-color="#F59E0B" stop-opacity="0.9"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0"/></linearGradient>` +
     `<clipPath id="rows"><rect x="0" y="${HEADER}" width="${W}" height="${H - HEADER - FOOTER}"/></clipPath></defs>` +
     body +
     `<line x1="24" y1="${H - FOOTER + 0.5}" x2="${W - 24}" y2="${H - FOOTER + 0.5}" stroke="${LINE}"/>` +
-    `<rect x="24" y="${H - FOOTER - 1}" width="120" height="3" fill="url(#sc)">` +
-    `<animate attributeName="x" values="24;${W - 144};24" dur="${frame.isLoading ? 1.2 : 4}s" repeatCount="indefinite"/></rect>` +
     `</svg>`
   )
 }
 
 function header(W: number, title: string, branch: string | null, sync: string): string {
-  let out =
-    `<text x="32" y="33" fill="#F59E0B" font-size="12" filter="url(#g)">◢</text>` +
-    `<text x="50" y="33" fill="#9A8F85" font-size="12">git://</text>`
+  let out = `<text x="32" y="33" fill="#F59E0B" font-size="12" filter="url(#g)">◢</text>`
   let right = W - 24
   out += `<text x="${right}" y="34" fill="#C9B79C" font-size="11" text-anchor="end">${esc(sync)}</text>`
   right -= sync.length * SMALL_CHAR + 12
@@ -88,9 +82,8 @@ function header(W: number, title: string, branch: string | null, sync: string): 
   }
 
   out +=
-    `<text x="98" y="33" fill="#EDE6DE" font-size="13">${esc(cut(title, Math.floor((right - 98) / CHAR)))}</text>` +
-    `<line x1="24" y1="55.5" x2="${W - 24}" y2="55.5" stroke="${LINE}"/>` +
-    `<line x1="24" y1="55.5" x2="140" y2="55.5" stroke="#F59E0B" opacity="0.7"/>`
+    `<text x="50" y="33" fill="#EDE6DE" font-size="13">${esc(cut(title, Math.floor((right - 50) / CHAR)))}</text>` +
+    `<line x1="24" y1="55.5" x2="${W - 24}" y2="55.5" stroke="${LINE}"/>`
 
   return out
 }
