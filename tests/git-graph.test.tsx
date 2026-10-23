@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { layout, parseLog } from '../hooks/git'
+import { COLORS, branchColor, layout, parseLog } from '../hooks/git'
 import { bandSvg, graphSvg } from '../hooks/svg'
 
 const F = '\x1f'
@@ -35,18 +35,60 @@ const PANE = {
 test('the lanes match the mockup: one fork, one merge, two lanes', async () => {
   const { rows, lanes } = layout(parseLog(LOG), ['origin'])
 
+  const feature = branchColor('feature/market')
+
   expect(lanes).toBe(2)
   expect(rows.map(r => r.lane)).toEqual([0, 0, 1, 1, 0, 0, 0])
   // The merge spawns lane 1 with a curve; the fork curves back into lane 0.
-  expect(rows[1]!.segs).toContainEqual([0, 1, 1])
-  expect(rows[3]!.segs).toContainEqual([1, 1, 1])
-  expect(rows[4]!.segs).toContainEqual([1, 0, 1])
+  // Each edge draws in its branch's color: main's, or the merged branch's.
+  expect(rows[1]!.segs).toContainEqual([0, 1, feature])
+  expect(rows[3]!.segs).toContainEqual([1, 1, feature])
+  expect(rows[4]!.segs).toContainEqual([1, 0, feature])
+  expect(rows[4]!.segs).toContainEqual([0, 0, 0])
+  expect(rows.map(r => r.color)).toEqual([0, 0, feature, feature, 0, 0, 0])
   expect(rows[0]!.refs).toEqual([
     { name: 'main', kind: 'head' },
     { name: 'origin/main', kind: 'remote' },
   ])
   expect(rows[5]!.refs).toEqual([{ name: 'v0.3.0', kind: 'tag' }])
   expect(rows[0]!.initials).toBe('FX')
+})
+
+test('a branch keeps its color by name, whatever lane it takes', async () => {
+  expect(branchColor('main')).toBe(0)
+  expect(branchColor('master')).toBe(0)
+  expect(branchColor('feature/x')).toBe(branchColor('feature/x'))
+  for (const name of ['feature/x', 'fix/y', 'release/1.0', 'dev']) {
+    expect(branchColor(name)).toBeGreaterThan(0)
+    expect(branchColor(name)).toBeLessThan(COLORS)
+  }
+
+  // A newer side branch takes lane 0 from main: main still draws as main.
+  const { rows } = layout(
+    parseLog(
+      commit('c3', 'c1', 'feature/x', 'Lavoro sul ramo') +
+        commit('c2', 'c1', 'HEAD -> main, origin/main', 'Lavoro su main') +
+        commit('c1', '', '', 'Primo'),
+    ),
+    ['origin'],
+  )
+  expect(rows[0]!.lane).toBe(0)
+  expect(rows[0]!.color).toBe(branchColor('feature/x'))
+  expect(rows[1]!.lane).toBe(1)
+  expect(rows[1]!.color).toBe(0)
+})
+
+test('a merge from a remote names the branch without its remote', async () => {
+  const { rows } = layout(
+    parseLog(
+      commit('m1', 'a1 b1', 'HEAD -> main', "Merge remote-tracking branch 'origin/fix/y'") +
+        commit('b1', 'a1', '', 'Fix') +
+        commit('a1', '', '', 'Primo'),
+    ),
+    ['origin'],
+  )
+  expect(rows[0]!.segs).toContainEqual([0, 1, branchColor('fix/y')])
+  expect(rows[1]!.color).toBe(branchColor('fix/y'))
 })
 
 test('a single lane still draws its line: the glow does not hide it', async () => {

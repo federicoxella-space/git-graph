@@ -2,7 +2,7 @@ export type RefKind = 'head' | 'branch' | 'remote' | 'tag'
 
 export type Ref = { name: string; kind: RefKind }
 
-/** A drawn edge between a row and the next: [fromLane, toLane, colorLane]. */
+/** A drawn edge between a row and the next: [fromLane, toLane, color]. */
 export type Seg = [number, number, number]
 
 export type Row = {
@@ -15,6 +15,8 @@ export type Row = {
   refs: Ref[]
   /** The lane the commit sits in. */
   lane: number
+  /** The palette index of the branch the commit is on (branchColor). */
+  color: number
   isMerge: boolean
   /** Edges toward the next row. */
   segs: Seg[]

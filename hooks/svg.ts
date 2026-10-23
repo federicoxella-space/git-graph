@@ -1,5 +1,5 @@
 import type { Graph, Ref, Row } from '../types'
-import { age } from './git'
+import { age, branchColor } from './git'
 
 export const ROW = 40
 export const HEADER = 56
@@ -74,9 +74,10 @@ function header(W: number, title: string, branch: string | null, sync: string): 
     const label = cut(branch, 28)
     const bw = label.length * SMALL_CHAR + 16
     const bx = right - bw
+    const [stroke, light] = color(branchColor(branch))
     out +=
-      `<rect x="${n(bx)}" y="21" width="${n(bw)}" height="18" rx="2" fill="#F59E0B" fill-opacity="0.12" stroke="#F59E0B" filter="url(#g)"/>` +
-      `<text x="${n(bx + bw / 2)}" y="34" fill="#FCD34D" class="b">${esc(label)}</text>` +
+      `<rect x="${n(bx)}" y="21" width="${n(bw)}" height="18" rx="2" fill="${stroke}" fill-opacity="0.12" stroke="${stroke}" filter="url(#g)"/>` +
+      `<text x="${n(bx + bw / 2)}" y="34" fill="${light}" class="b">${esc(label)}</text>` +
       `<text x="${n(bx - 8)}" y="33" fill="#9A8F85" font-size="11" text-anchor="end">BRANCH</text>`
     right = bx - 8 - 6 * SMALL_CHAR - 16
   }
@@ -132,8 +133,8 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
     const y1 = y(i)
     const y2 = y1 + ROW
 
-    for (const [from, to, lane] of row.segs) {
-      const [stroke] = color(lane)
+    for (const [from, to, tone] of row.segs) {
+      const [stroke] = color(tone)
       const x1 = x(from)
       const x2 = x(to)
       const d =
@@ -145,7 +146,7 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
 
     if (i < offset || i >= offset + visible) continue
 
-    const [stroke, light] = color(row.lane)
+    const [stroke, light] = color(row.color)
     const isHead = row.refs.some(r => r.kind === 'head')
     nodes +=
       `<use href="#hx" x="${x(row.lane)}" y="${y1}" fill="${HOST}"/>` +
@@ -163,7 +164,7 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
 
     let cx = msgX
     for (const ref of row.refs) {
-      const badge = refBadge(ref, row, cx, y1, authorX - 12)
+      const badge = refBadge(ref, cx, y1, authorX - 12)
       if (badge === null) break
       text += badge.svg
       cx = badge.next
@@ -217,7 +218,6 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
 
 function refBadge(
   ref: Ref,
-  row: Row,
   at: number,
   y: number,
   limit: number,
@@ -227,7 +227,7 @@ function refBadge(
   if (at + w > limit) return null
 
   const [stroke, light] =
-    ref.kind === 'tag' ? TAG : ref.kind === 'remote' ? ['#524A44', '#B3A89E'] : color(row.lane)
+    ref.kind === 'tag' ? TAG : ref.kind === 'remote' ? ['#524A44', '#B3A89E'] : color(branchColor(ref.name))
   const box =
     ref.kind === 'remote'
       ? `fill="none" stroke="${stroke}" stroke-dasharray="3 2"`
@@ -251,7 +251,7 @@ export function bandSvg(width: number, graph: Ok, nowSeconds: number): string {
   const H = BAND_H
   const mid = 24
   const head = graph.rows.find(r => r.refs.some(ref => ref.kind === 'head')) ?? graph.rows[0]!
-  const [stroke, light] = color(head.lane)
+  const [stroke, light] = color(head.color)
 
   let x = 16
   const branch = cut(graph.branch, 24)
