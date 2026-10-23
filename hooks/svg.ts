@@ -50,7 +50,9 @@ function shell(frame: Frame, body: string): string {
     `<style>text{font-family:ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace}` +
     `.h{fill:#5B6578;font-size:12px}.m{fill:#CBD5E1;font-size:13px}.d{fill:${MUTED};font-size:11px}` +
     `.b{font-size:11px;text-anchor:middle}.sep{stroke:#1E2430;stroke-dasharray:2 4}</style>` +
-    `<defs><filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/>` +
+    // The glow's region is the whole drawing: sized to the element's box, a
+    // group of vertical lines alone (one lane) has width 0 and draws nothing.
+    `<defs><filter id="g" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><feGaussianBlur stdDeviation="2.2" result="b"/>` +
     `<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
     `<polygon id="hx" points="0,-7 6.06,-3.5 6.06,3.5 0,7 -6.06,3.5 -6.06,-3.5"/>` +
     `<linearGradient id="sc" x1="0" x2="1"><stop offset="0" stop-color="#22D3EE" stop-opacity="0"/>` +

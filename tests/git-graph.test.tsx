@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { layout, parseLog } from '../hooks/git'
+import { graphSvg } from '../hooks/svg'
 
 const F = '\x1f'
 const R = '\x1e'
@@ -48,6 +49,22 @@ test('the lanes match the mockup: one fork, one merge, two lanes', async () => {
   expect(rows[0]!.initials).toBe('FX')
 })
 
+test('a single lane still draws its line: the glow does not hide it', async () => {
+  const { rows, lanes } = layout(
+    parseLog(commit('2a51748', '26f45fa', 'HEAD -> main', 'Secondo') + commit('26f45fa', '', '', 'Primo')),
+    [],
+  )
+  const graph = {
+    kind: 'ok', repo: 'git-graph', branch: 'main', ahead: 0, behind: 0,
+    rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0,
+  } as const
+  const source = graphSvg({ width: 700, height: 400, nowSeconds: 1700000000, isLoading: false }, graph, 0)
+
+  expect(rows[0]!.segs).toEqual([[0, 0, 0]])
+  expect(source).toContain('<path d="M32 76V116"')
+  expect(source).toContain('filterUnits="userSpaceOnUse"')
+})
+
 test('the pane draws the repository on every surface', async ($, on) => {
   on('command.register', () => ({ value: { command: 'gitgraph' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -72,7 +89,12 @@ test('the pane draws the repository on every surface', async ($, on) => {
   })
 
   await $.session.start({ cwd: '/work/fantasy', surface: 'desktop', isInteractive: true })
-  await $.command.run({ command: 'gitgraph', args: '' })
+  await $.command.run({
+    command: 'gitgraph',
+    args: '',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: true, columns: 200 },
+  })
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const svg = await desktop.find({ type: 'Svg' })
