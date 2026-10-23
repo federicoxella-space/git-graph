@@ -12,21 +12,21 @@ const SMALL_CHAR = 6.7
 /** What Claude Code paints under every component: the drawing has no
  * background of its own, and uses this only to knock lines out behind nodes. */
 const HOST = '#212121'
-const LINE = '#333333'
-const MUTED = '#8C8C8C'
+const LINE = '#3A3532'
+const MUTED = '#9A8F85'
 
-/** Lane colors: [stroke, light text]. */
+/** Lane colors, warm only: [stroke, light text]. The first is the accent too. */
 const PALETTE: [string, string][] = [
-  ['#22D3EE', '#A5F3FC'],
-  ['#E879F9', '#F5D0FE'],
-  ['#A3E635', '#D9F99D'],
-  ['#FB923C', '#FED7AA'],
-  ['#818CF8', '#C7D2FE'],
-  ['#F472B6', '#FBCFE8'],
-  ['#2DD4BF', '#99F6E4'],
-  ['#60A5FA', '#BFDBFE'],
+  ['#F59E0B', '#FCD34D'],
+  ['#F43F5E', '#FDA4AF'],
+  ['#F97316', '#FDBA74'],
+  ['#EAB308', '#FDE047'],
+  ['#EC4899', '#F9A8D4'],
+  ['#D97757', '#F0B9A3'],
+  ['#EF4444', '#FCA5A5'],
+  ['#C2410C', '#FB923C'],
 ]
-const TAG: [string, string] = ['#FBBF24', '#FDE68A']
+const TAG: [string, string] = ['#E7C9A0', '#F5E6D3']
 
 const color = (lane: number): [string, string] => PALETTE[lane % PALETTE.length] ?? PALETTE[0]!
 
@@ -50,15 +50,15 @@ function shell(frame: Frame, body: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
     `<style>text{font-family:ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace}` +
-    `.h{fill:#707070;font-size:12px}.m{fill:#D4D4D4;font-size:13px}.d{fill:${MUTED};font-size:11px}` +
-    `.b{font-size:11px;text-anchor:middle}.sep{stroke:#2E2E2E;stroke-dasharray:2 4}</style>` +
+    `.h{fill:#7A7069;font-size:12px}.m{fill:#E5DED6;font-size:13px}.d{fill:${MUTED};font-size:11px}` +
+    `.b{font-size:11px;text-anchor:middle}.sep{stroke:#332E2B;stroke-dasharray:2 4}</style>` +
     // The glow's region is the whole drawing: sized to the element's box, a
     // group of vertical lines alone (one lane) has width 0 and draws nothing.
     `<defs><filter id="g" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><feGaussianBlur stdDeviation="2.2" result="b"/>` +
     `<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
     `<polygon id="hx" points="0,-7 6.06,-3.5 6.06,3.5 0,7 -6.06,3.5 -6.06,-3.5"/>` +
-    `<linearGradient id="sc" x1="0" x2="1"><stop offset="0" stop-color="#22D3EE" stop-opacity="0"/>` +
-    `<stop offset="0.5" stop-color="#22D3EE" stop-opacity="0.9"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></linearGradient>` +
+    `<linearGradient id="sc" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B" stop-opacity="0"/>` +
+    `<stop offset="0.5" stop-color="#F59E0B" stop-opacity="0.9"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0"/></linearGradient>` +
     `<clipPath id="rows"><rect x="0" y="${HEADER}" width="${W}" height="${H - HEADER - FOOTER}"/></clipPath></defs>` +
     body +
     `<line x1="24" y1="${H - FOOTER + 0.5}" x2="${W - 24}" y2="${H - FOOTER + 0.5}" stroke="${LINE}"/>` +
@@ -70,10 +70,10 @@ function shell(frame: Frame, body: string): string {
 
 function header(W: number, title: string, branch: string | null, sync: string): string {
   let out =
-    `<text x="32" y="33" fill="#22D3EE" font-size="12" filter="url(#g)">◢</text>` +
-    `<text x="50" y="33" fill="#8C8C8C" font-size="12">git://</text>`
+    `<text x="32" y="33" fill="#F59E0B" font-size="12" filter="url(#g)">◢</text>` +
+    `<text x="50" y="33" fill="#9A8F85" font-size="12">git://</text>`
   let right = W - 24
-  out += `<text x="${right}" y="34" fill="#34D399" font-size="11" text-anchor="end">${esc(sync)}</text>`
+  out += `<text x="${right}" y="34" fill="#C9B79C" font-size="11" text-anchor="end">${esc(sync)}</text>`
   right -= sync.length * SMALL_CHAR + 12
 
   if (branch !== null) {
@@ -81,16 +81,16 @@ function header(W: number, title: string, branch: string | null, sync: string): 
     const bw = label.length * SMALL_CHAR + 16
     const bx = right - bw
     out +=
-      `<rect x="${n(bx)}" y="21" width="${n(bw)}" height="18" rx="2" fill="#22D3EE" fill-opacity="0.12" stroke="#22D3EE" filter="url(#g)"/>` +
-      `<text x="${n(bx + bw / 2)}" y="34" fill="#A5F3FC" class="b">${esc(label)}</text>` +
-      `<text x="${n(bx - 8)}" y="33" fill="#8C8C8C" font-size="11" text-anchor="end">BRANCH</text>`
+      `<rect x="${n(bx)}" y="21" width="${n(bw)}" height="18" rx="2" fill="#F59E0B" fill-opacity="0.12" stroke="#F59E0B" filter="url(#g)"/>` +
+      `<text x="${n(bx + bw / 2)}" y="34" fill="#FCD34D" class="b">${esc(label)}</text>` +
+      `<text x="${n(bx - 8)}" y="33" fill="#9A8F85" font-size="11" text-anchor="end">BRANCH</text>`
     right = bx - 8 - 6 * SMALL_CHAR - 16
   }
 
   out +=
-    `<text x="98" y="33" fill="#E6E6E6" font-size="13">${esc(cut(title, Math.floor((right - 98) / CHAR)))}</text>` +
+    `<text x="98" y="33" fill="#EDE6DE" font-size="13">${esc(cut(title, Math.floor((right - 98) / CHAR)))}</text>` +
     `<line x1="24" y1="55.5" x2="${W - 24}" y2="55.5" stroke="${LINE}"/>` +
-    `<line x1="24" y1="55.5" x2="140" y2="55.5" stroke="#22D3EE" opacity="0.7"/>`
+    `<line x1="24" y1="55.5" x2="140" y2="55.5" stroke="#F59E0B" opacity="0.7"/>`
 
   return out
 }
@@ -197,8 +197,8 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
     const thumb = Math.max(18, (track * visible) / total)
     const top = HEADER + 8 + ((track - thumb) * offset) / Math.max(1, total - visible)
     scrollbar =
-      `<rect x="${W - 9}" y="${HEADER + 8}" width="2" height="${track}" rx="1" fill="#2E2E2E"/>` +
-      `<rect x="${W - 9.5}" y="${n(top)}" width="3" height="${n(thumb)}" rx="1.5" fill="#22D3EE" filter="url(#g)"/>`
+      `<rect x="${W - 9}" y="${HEADER + 8}" width="2" height="${track}" rx="1" fill="#332E2B"/>` +
+      `<rect x="${W - 9.5}" y="${n(top)}" width="3" height="${n(thumb)}" rx="1.5" fill="#F59E0B" filter="url(#g)"/>`
   }
 
   const sync = frame.isLoading
@@ -209,8 +209,8 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
   const fy = H - FOOTER / 2 + 4
   const pad = (v: number) => String(v).padStart(2, '0')
   const footer =
-    `<text x="${n(W * 0.2)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#22D3EE">${pad(graph.branches)}</tspan> BRANCH</text>` +
-    `<text x="${n(W * 0.5)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#E879F9">${pad(graph.remotes)}</tspan> REMOTE</text>` +
+    `<text x="${n(W * 0.2)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#F59E0B">${pad(graph.branches)}</tspan> BRANCH</text>` +
+    `<text x="${n(W * 0.5)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#F43F5E">${pad(graph.remotes)}</tspan> REMOTE</text>` +
     `<text x="${n(W * 0.8)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="${TAG[0]}">${pad(graph.tags)}</tspan> TAG</text>`
 
   return shell(
@@ -234,7 +234,7 @@ function refBadge(
   if (at + w > limit) return null
 
   const [stroke, light] =
-    ref.kind === 'tag' ? TAG : ref.kind === 'remote' ? ['#4A4A4A', '#A3A3A3'] : color(row.lane)
+    ref.kind === 'tag' ? TAG : ref.kind === 'remote' ? ['#524A44', '#B3A89E'] : color(row.lane)
   const box =
     ref.kind === 'remote'
       ? `fill="none" stroke="${stroke}" stroke-dasharray="3 2"`
@@ -280,8 +280,8 @@ export function bandSvg(width: number, graph: Ok, nowSeconds: number): string {
   const sync =
     graph.ahead === null || graph.behind === null
       ? `<tspan fill="${MUTED}">—</tspan>`
-      : `<tspan fill="${ahead > 0 ? '#22D3EE' : behind > 0 ? MUTED : '#34D399'}">↑${ahead}</tspan>` +
-        `<tspan fill="${behind > 0 ? '#FB923C' : ahead > 0 ? MUTED : '#34D399'}"> ↓${behind}</tspan>`
+      : `<tspan fill="${ahead > 0 ? '#F59E0B' : behind > 0 ? MUTED : '#C9B79C'}">↑${ahead}</tspan>` +
+        `<tspan fill="${behind > 0 ? '#EF4444' : ahead > 0 ? MUTED : '#C9B79C'}"> ↓${behind}</tspan>`
   out += `<text x="${n(x)}" y="${mid}" font-size="11">${sync}</text>`
   x += 6 * SMALL_CHAR + 12
 
@@ -289,25 +289,25 @@ export function bandSvg(width: number, graph: Ok, nowSeconds: number): string {
   const dirtyX = right - 6 * SMALL_CHAR - 12
   out +=
     `<text x="${right}" y="${mid}" fill="${MUTED}" font-size="11" text-anchor="end">` +
-    `<tspan fill="${graph.dirty > 0 ? TAG[0] : '#34D399'}">●</tspan> ${graph.dirty}Δ</text>` +
+    `<tspan fill="${graph.dirty > 0 ? '#F97316' : '#C9B79C'}">●</tspan> ${graph.dirty}Δ</text>` +
     `<line x1="${n(dirtyX)}" y1="12" x2="${n(dirtyX)}" y2="28" stroke="${LINE}"/>` +
     `<line x1="${n(x)}" y1="12" x2="${n(x)}" y2="28" stroke="${LINE}"/>`
   x += 18
 
   if (behind > 0) {
     const room = Math.floor((dirtyX - 12 - x) / CHAR)
-    out += `<text x="${n(x)}" y="${mid}" fill="#FB923C" font-size="12">${esc(cut(`${behind} commit da scaricare`, room))}</text>`
+    out += `<text x="${n(x)}" y="${mid}" fill="#EF4444" font-size="12">${esc(cut(`${behind} commit da scaricare`, room))}</text>`
   } else {
     const ageX = dirtyX - 12
     out +=
       `<use href="#hx" x="${n(x)}" y="20" fill="${HOST}"/>` +
       `<use href="#hx" x="${n(x)}" y="20" fill="${stroke}" fill-opacity="0.18" stroke="${stroke}" stroke-width="1.5"/>` +
       `<circle cx="${n(x)}" cy="20" r="2" fill="${light}" filter="url(#g)"/>` +
-      `<text x="${n(x + 16)}" y="${mid}" fill="#707070" font-size="12">${head.hash}</text>` +
+      `<text x="${n(x + 16)}" y="${mid}" fill="#7A7069" font-size="12">${head.hash}</text>` +
       `<text x="${n(ageX)}" y="${mid}" fill="${MUTED}" font-size="11" text-anchor="end">${age(head.time, nowSeconds)}</text>`
     const subjectX = x + 16 + 8 * CHAR
     const room = Math.floor((ageX - 3 * SMALL_CHAR - 12 - subjectX) / CHAR)
-    out += `<text x="${n(subjectX)}" y="${mid}" fill="#D4D4D4" font-size="12">${esc(cut(head.subject, room))}</text>`
+    out += `<text x="${n(subjectX)}" y="${mid}" fill="#E5DED6" font-size="12">${esc(cut(head.subject, room))}</text>`
   }
 
   return `${out}</svg>`
