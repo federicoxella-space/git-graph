@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { layout, parseLog } from '../hooks/git'
-import { graphSvg } from '../hooks/svg'
+import { bandSvg, graphSvg } from '../hooks/svg'
 
 const F = '\x1f'
 const R = '\x1e'
@@ -56,7 +56,7 @@ test('a single lane still draws its line: the glow does not hide it', async () =
   )
   const graph = {
     kind: 'ok', repo: 'git-graph', branch: 'main', ahead: 0, behind: 0,
-    rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0,
+    rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0, dirty: 0,
   } as const
   const source = graphSvg({ width: 700, height: 400, nowSeconds: 1700000000, isLoading: false }, graph, 0)
 
@@ -66,6 +66,12 @@ test('a single lane still draws its line: the glow does not hide it', async () =
 })
 
 test('the pane draws the repository on every surface', async ($, on) => {
+  // Hidden, the band hands the site back: this hook stands for the engine.
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
   on('command.register', () => ({ value: { command: 'gitgraph' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('clock.every', () => ({ value: undefined }))
@@ -84,6 +90,7 @@ test('the pane draws the repository on every surface', async ($, on) => {
     if (args.startsWith('for-each-ref'))
       return out('refs/heads/main\nrefs/heads/feature/market\nrefs/remotes/origin/main\nrefs/tags/v0.3.0\n')
     if (args.startsWith('log')) return out(LOG)
+    if (args === 'status --porcelain') return out(' M hooks/svg.ts\n?? notes.md\n')
 
     return out('', 1)
   })
@@ -105,7 +112,35 @@ test('the pane draws the repository on every surface', async ($, on) => {
   expect(source.length).toBeLessThan(131072)
   await desktop.unmount()
 
+  const BAND = {
+    plugin: 'git-graph',
+    component: 'AbovePrompt',
+    requestId: 'band',
+    props: { hasSurvey: false, isWorking: false, maxRows: 8, bodyColumns: 120, scroll: { offset: 0, bodyRows: 8 }, view: {} },
+  } as const
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const bandSource = String((await band.find({ type: 'Svg' }))?.props.source)
+  expect(bandSource).toContain('a3f9c21')
+  expect(bandSource).toContain('2Δ')
+  expect(await band.find({ key: 'band-pane' })).toBeUndefined()
+  expect((await band.find({ key: 'band-hide' }))?.text).toBe('✕')
+  await band.press({ key: 'band-hide' })
+  expect(await band.find({ type: 'Svg' })).toBeUndefined()
+  await band.unmount()
+
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await terminal.find({ type: 'Text', text: /a3f9c21/ }))?.text).toContain('Fix calcolo tasse')
   await terminal.unmount()
+})
+
+test('the band warns when the branch is behind its upstream', async () => {
+  const { rows, lanes } = layout(parseLog(LOG), ['origin'])
+  const source = bandSvg(
+    700,
+    { kind: 'ok', repo: 'r', branch: 'main', ahead: 0, behind: 4, rows, lanes, hasMore: false, branches: 1, remotes: 1, tags: 0, dirty: 0 },
+    1700000000,
+  )
+
+  expect(source).toContain('4 commit da scaricare')
+  expect(source).not.toContain('a3f9c21')
 })

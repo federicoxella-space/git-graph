@@ -42,6 +42,8 @@ export type Graph =
       branches: number
       remotes: number
       tags: number
+      /** Files `git status --porcelain` lists: modified, staged or untracked. */
+      dirty: number
     }
 
 declare module 'claude-code' {
@@ -52,6 +54,7 @@ declare module 'claude-code' {
       limit: number
       filters: Filters
       isLoading: boolean
+      isBandHidden: boolean
     }
   }
 }
