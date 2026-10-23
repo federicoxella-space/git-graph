@@ -159,8 +159,8 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
       nodes +=
         `<circle cx="${x(row.lane)}" cy="${y1}" r="2.5" fill="${light}" filter="url(#g)"/>` +
         `<circle cx="${x(row.lane)}" cy="${y1}" r="11" fill="none" stroke="${stroke}" stroke-width="1">` +
-        `<animate attributeName="r" values="9;14;9" dur="2.4s" repeatCount="indefinite"/>` +
-        `<animate attributeName="opacity" values="0.7;0;0.7" dur="2.4s" repeatCount="indefinite"/></circle>`
+        `<animate attributeName="r" values="9;16" dur="2.4s" repeatCount="indefinite"/>` +
+        `<animate attributeName="opacity" values="0.7;0" dur="2.4s" repeatCount="indefinite"/></circle>`
     }
 
     const ty = y1 + 4
