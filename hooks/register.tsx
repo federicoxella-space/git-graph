@@ -265,10 +265,14 @@ export const register: Register = on => {
             ? messageSvg(frame, 'errore', g.message)
             : messageSvg(frame, 'scansione', 'Lettura del repository…')
 
+    // A desktop raises `ui.scroll` only over a tree taller than the body: the
+    // spacer under the button keeps it so. The scroll hook never calls next, so
+    // the window stays at the top and the spacer is never shown.
     return (
       <Box flexDirection="column">
         <Svg source={source} alt={altText(g)} width={width} height={height} />
         {refresh}
+        <Box key="scroll-room" height={e.props.scroll.bodyRows} />
       </Box>
     )
   })

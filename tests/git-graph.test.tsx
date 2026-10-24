@@ -162,6 +162,8 @@ test('the pane draws the repository on every surface', async ($, on) => {
   expect(source).toContain('a3f9c21')
   expect(source).toContain('v0.3.0')
   expect(source.length).toBeLessThan(131072)
+  // Taller than the body, so the desktop raises ui.scroll at all.
+  expect((await desktop.find({ key: 'scroll-room' }))?.props.height).toBe(30)
   await desktop.unmount()
 
   const BAND = {
