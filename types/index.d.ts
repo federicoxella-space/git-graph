@@ -54,7 +54,6 @@ declare module 'claude-code' {
   interface PluginState {
     'git-graph': {
       graph: Graph
-      offset: number
       limit: number
       filters: Filters
       isLoading: boolean
