@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { COLORS, authorColor, branchColor, layout, parseLog } from '../hooks/git'
-import { bandSvg, graphSvg } from '../hooks/svg'
+import { bandSvg, graphSvg, lastVisibleRow } from '../hooks/svg'
 
 const F = '\x1f'
 const R = '\x1e'
@@ -110,14 +110,17 @@ test('a single lane still draws its line: the glow does not hide it', async () =
     kind: 'ok', repo: 'git-graph', branch: 'main', ahead: 0, behind: 0,
     rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0, dirty: 0,
   } as const
-  const source = graphSvg({ width: 700, height: 400, nowSeconds: 1700000000, isLoading: false }, graph, 0)
+  const source = graphSvg(700, graph, 0, 2, 1700000000)
 
   expect(rows[0]!.segs).toEqual([[0, 0, 0]])
-  expect(source).toContain('<path d="M32 76V116"')
+  expect(source).toContain('<path d="M32 20V60"')
   expect(source).toContain('filterUnits="userSpaceOnUse"')
 })
 
-test('the pane draws the repository on every surface', async ($, on) => {
+type On = Parameters<Parameters<typeof test>[1]>[1]
+
+/** Stands for the engine and git: `log` is what `git log` prints, `isRepo` false answers "not a repository". */
+function mockRepo(on: On, log: string | string[], isRepo = true) {
   // Hidden, the band hands the site back: this hook stands for the engine.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -135,17 +138,27 @@ test('the pane draws the repository on every surface', async ($, on) => {
     const out = (stdout: string, exitCode = 0) => ({
       value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
     })
-    if (args === 'rev-parse --show-toplevel') return out('/work/fantasy-socioeconomic-simulator-2.0\n')
+    if (args === 'rev-parse --show-toplevel')
+      return isRepo ? out('/work/fantasy-socioeconomic-simulator-2.0\n') : out('', 128)
     if (args === 'rev-parse --abbrev-ref HEAD') return out('main\n')
     if (args.startsWith('rev-list')) return out('0\t0\n')
     if (args === 'remote') return out('origin\n')
     if (args.startsWith('for-each-ref'))
       return out('refs/heads/main\nrefs/heads/feature/market\nrefs/remotes/origin/main\nrefs/tags/v0.3.0\n')
-    if (args.startsWith('log')) return out(LOG)
+    if (args.startsWith('log')) {
+      // A list of commits honours `-n`, as git does.
+      const n = Number(/-n(\d+)/.exec(args)?.[1] ?? log.length)
+
+      return out(typeof log === 'string' ? log : log.slice(0, n).join(''))
+    }
     if (args === 'status --porcelain') return out(' M hooks/svg.ts\n?? notes.md\n')
 
     return out('', 1)
   })
+}
+
+test('the pane draws the repository on every surface', async ($, on) => {
+  mockRepo(on, LOG)
 
   await $.session.start({ cwd: '/work/fantasy', surface: 'desktop', isInteractive: true })
   await $.command.run({
@@ -156,23 +169,34 @@ test('the pane draws the repository on every surface', async ($, on) => {
   })
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const root = await desktop.find({ type: 'Box' })
+  const top = await desktop.find({ key: 'top' })
   const drawing = await desktop.find({ key: 'drawing' })
+  expect(root?.children[0]?.props.key).toBe('top')
+  expect(root?.children[1]?.props.key).toBe('drawing')
+  const header = top?.children[0] as { props: Record<string, unknown> } | undefined
+  expect(String(header?.props.source)).toContain('fantasy-socioeconomic-simulator-2.0')
+  expect(String(header?.props.source)).toContain('main')
+  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻ Aggiorna')
+  // One block for 7 commits: 7 rows of 40 px, every hash in it.
+  expect(drawing?.children.length).toBe(1)
   const svg = drawing?.children[0] as { props: Record<string, unknown> } | undefined
   expect(svg?.props.alt).toBe('Grafico git di fantasy-socioeconomic-simulator-2.0, branch main, 7 commit caricati')
+  expect(svg?.props.height).toBe(280)
   const source = String(svg?.props.source)
-  expect(source).toContain('a3f9c21')
+  for (const hash of ['a3f9c21', '7b2e104', 'e91d0aa', '4c77f12', '0d3b5e8', '92ac1f7', '1e6d4b9']) {
+    expect(source).toContain(hash)
+  }
   expect(source).toContain('v0.3.0')
   expect(source.length).toBeLessThan(131072)
-  // The drawing fills the body, a one-row Box either side gives the window room to move.
-  expect(drawing?.props.height).toBe(30)
-  const root = await desktop.find({ type: 'Box' })
-  expect(root?.children[0]?.props.key).toBe('margin-top')
-  expect(root?.children[2]?.props.key).toBe('margin-bottom')
-  for (const key of ['margin-top', 'margin-bottom']) {
-    const margin = await desktop.find({ key })
-    expect(margin?.type).toBe('Box')
-    expect(margin?.props.height).toBe(1)
-  }
+  // The pane scrolls natively: no amber bar, no footer, no margins, no fixed height.
+  const all = [header, ...(drawing?.children ?? [])].map(c => String(c?.props.source)).join('')
+  expect(all).not.toContain('rx="1.5" fill="#F59E0B"')
+  expect(all).not.toContain(' REMOTE</text>')
+  expect(all).not.toContain(' TAG</text>')
+  expect(await desktop.find({ key: 'margin-top' })).toBeUndefined()
+  expect(await desktop.find({ key: 'margin-bottom' })).toBeUndefined()
+  expect(drawing?.props.height).toBeUndefined()
   await desktop.unmount()
 
   const BAND = {
@@ -208,4 +232,67 @@ test('the band warns when the branch is behind its upstream', async () => {
 
   expect(source).toContain('4 commit da scaricare')
   expect(source).not.toContain('a3f9c21')
+})
+
+test('the drawing splits in blocks of 50 commits with continuous lanes', async ($, on) => {
+  // 120 commits in a line; the mock honours `-n`, so the first load gives 100 and the
+  // desktop scroll near the end loads the other 20.
+  const all = Array.from({ length: 120 }, (_, i) =>
+    commit(`c${String(i).padStart(3, '0')}`, i < 119 ? `c${String(i + 1).padStart(3, '0')}` : '', i === 0 ? 'HEAD -> main' : '', `Commit ${i}`),
+  )
+  mockRepo(on, all, true)
+  // The engine's answer to the wheel: the window lands where the event asked.
+  on('ui.scroll', (_, e) => ({ offset: e.offset }))
+
+  await $.session.start({ cwd: '/work/fantasy', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'gitgraph', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const heights = async () =>
+    (((await desktop.find({ key: 'drawing' }))?.children ?? []) as { props: Record<string, unknown> }[]).map(b => b.props.height)
+  expect(await heights()).toEqual([2000, 2000])
+
+  await $.ui.scroll({
+    component: 'Pane', requestId: 'git-graph', offset: 150, by: 10, bodyRows: 30, origin: { kind: 'person' },
+  } as never)
+  // loadMore runs in the background: wait for the rescan.
+  for (let i = 0; i < 50 && (await heights()).length < 3; i++) await new Promise(r => setTimeout(r, 20))
+  expect(await heights()).toEqual([2000, 2000, 800])
+  const blocks = ((await desktop.find({ key: 'drawing' }))?.children ?? []) as { props: Record<string, unknown> }[]
+  expect(String(blocks[1]!.props.source)).toContain('<path d="M32 -20V20"')
+  await desktop.unmount()
+})
+
+test('a full block stays under the Svg source limit', async () => {
+  const log = Array.from({ length: 50 }, (_, i) =>
+    commit(`d${String(i).padStart(3, '0')}`, `d${String(i + 1).padStart(3, '0')}`, 'HEAD -> feature/una-ramo-molto-lungo, origin/feature/una-ramo-molto-lungo, tag: v1.0.0, release/lunga', 'Un oggetto molto lungo '.repeat(20)),
+  ).join('')
+  const { rows } = layout(parseLog(log), ['origin'])
+  // Eight lanes everywhere: the widest case for the paths.
+  const wide = rows.map(r => ({ ...r, lane: 7, segs: Array.from({ length: 8 }, (_, l) => [l, 7 - l, l] as [number, number, number]) }))
+  const graph = {
+    kind: 'ok', repo: 'r', branch: 'main', ahead: 0, behind: 0,
+    rows: wide, lanes: 8, hasMore: false, branches: 1, remotes: 1, tags: 1, dirty: 0,
+  } as const
+  expect(graphSvg(1200, graph, 0, 50, 1700000000).length).toBeLessThan(131072)
+})
+
+test('lastVisibleRow maps the native window to a commit', async () => {
+  expect(lastVisibleRow(0, 30)).toBe(12)
+  expect(lastVisibleRow(200, 30)).toBe(107)
+})
+
+test('outside a repository the pane says so under the header', async ($, on) => {
+  mockRepo(on, '', false)
+
+  await $.session.start({ cwd: '/work/fantasy', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'gitgraph', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const header = (await desktop.find({ key: 'top' }))?.children[0] as { props: Record<string, unknown> } | undefined
+  const message = (await desktop.find({ key: 'drawing' }))?.children[0] as { props: Record<string, unknown> } | undefined
+  expect(String(header?.props.source)).toContain('/work/fantasy')
+  expect(String(message?.props.source)).toContain('Questa cartella non è un repository git')
+  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻ Aggiorna')
+  await desktop.unmount()
 })
