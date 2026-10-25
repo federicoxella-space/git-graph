@@ -177,7 +177,7 @@ test('the pane draws the repository on every surface', async ($, on) => {
   const header = top?.children[0] as { props: Record<string, unknown> } | undefined
   expect(String(header?.props.source)).toContain('fantasy-socioeconomic-simulator-2.0')
   expect(String(header?.props.source)).toContain('main')
-  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻ Aggiorna')
+  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻')
   // One block for 7 commits: 7 rows of 40 px, every hash in it.
   expect(drawing?.children.length).toBe(1)
   const svg = drawing?.children[0] as { props: Record<string, unknown> } | undefined
@@ -293,6 +293,6 @@ test('outside a repository the pane says so under the header', async ($, on) => 
   const message = (await desktop.find({ key: 'drawing' }))?.children[0] as { props: Record<string, unknown> } | undefined
   expect(String(header?.props.source)).toContain('/work/fantasy')
   expect(String(message?.props.source)).toContain('Questa cartella non è un repository git')
-  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻ Aggiorna')
+  expect((await desktop.find({ key: 'refresh' }))?.text).toBe('↻')
   await desktop.unmount()
 })
