@@ -1,0 +1,32 @@
+# Installed by devflow 0.10.0. Re-run /devflow:init → Release to update.
+# Every pull request merged into main becomes a release: tag vX.Y.Z and a GitHub Release
+# whose notes are the PR title (see .devflow/release.sh). Nothing is pushed to the branch.
+name: devflow-release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+# No concurrency group: GitHub keeps only one pending run per group and cancels the others.
+# release.sh retries when two merges race for the same tag.
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Release
+        env:
+          RELEASE_FORGE: github
+          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .devflow/release.sh
