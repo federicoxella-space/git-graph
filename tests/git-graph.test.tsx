@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { COLORS, authorColor, branchColor, layout, parseLog } from '../hooks/git'
-import { CHUNK, ROW, bandSvg, rowsSvg } from '../hooks/svg'
+import { bandSvg, graphSvg } from '../hooks/svg'
 
 const F = '\x1f'
 const R = '\x1e'
@@ -110,10 +110,10 @@ test('a single lane still draws its line: the glow does not hide it', async () =
     kind: 'ok', repo: 'git-graph', branch: 'main', ahead: 0, behind: 0,
     rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0, dirty: 0,
   } as const
-  const source = rowsSvg(700, graph, 0, rows.length, 1700000000)
+  const source = graphSvg({ width: 700, height: 400, nowSeconds: 1700000000, isLoading: false }, graph, 0)
 
   expect(rows[0]!.segs).toEqual([[0, 0, 0]])
-  expect(source).toContain('<path d="M32 20V60"')
+  expect(source).toContain('<path d="M32 76V116"')
   expect(source).toContain('filterUnits="userSpaceOnUse"')
 })
 
@@ -156,15 +156,14 @@ test('the pane draws the repository on every surface', async ($, on) => {
   })
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const [head, rows, foot] = await desktop.findAll({ type: 'Svg' })
-  expect(head?.props.alt).toBe('Grafico git di fantasy-socioeconomic-simulator-2.0, branch main, 7 commit caricati')
-  // Every commit is drawn: the pane scrolls the drawing, the mod does not.
-  const source = String(rows?.props.source)
+  const svg = await desktop.find({ type: 'Svg' })
+  expect(svg?.props.alt).toBe('Grafico git di fantasy-socioeconomic-simulator-2.0, branch main, 7 commit caricati')
+  const source = String(svg?.props.source)
   expect(source).toContain('a3f9c21')
-  expect(source).toContain('1e6d4b9')
   expect(source).toContain('v0.3.0')
-  expect(rows?.props.height).toBe(7 * ROW)
-  expect(String(foot?.props.source)).toContain('BRANCH')
+  expect(source.length).toBeLessThan(131072)
+  // The drawing fills the body, a margin row either side gives the window room to move.
+  expect((await desktop.find({ key: 'drawing' }))?.props.height).toBe(30)
   await desktop.unmount()
 
   const BAND = {
@@ -198,22 +197,4 @@ test('the band warns when the branch is behind its upstream', async () => {
 
   expect(source).toContain('4 commit da scaricare')
   expect(source).not.toContain('a3f9c21')
-})
-
-test('a long history splits into drawings under the size cap that join without a seam', async () => {
-  const many = Array.from({ length: 120 }, (_, i) =>
-    commit(`c${i}`, i < 119 ? `c${i + 1}` : '', i === 0 ? 'HEAD -> main' : '', `Commit numero ${i} con un messaggio lungo`),
-  ).join('')
-  const { rows, lanes } = layout(parseLog(many), [])
-  const graph = {
-    kind: 'ok', repo: 'r', branch: 'main', ahead: 0, behind: 0,
-    rows, lanes, hasMore: false, branches: 1, remotes: 0, tags: 0, dirty: 0,
-  } as const
-
-  const second = rowsSvg(700, graph, CHUNK, 2 * CHUNK, 1700000000)
-  expect(second.length).toBeLessThan(131072)
-  expect(second).toContain(`Commit numero ${CHUNK} `)
-  expect(second).not.toContain(`Commit numero ${CHUNK - 1} `)
-  // The row above draws its edge down into this drawing: no gap at the top.
-  expect(second).toContain('<path d="M32 -20V20"')
 })

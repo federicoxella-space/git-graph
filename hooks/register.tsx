@@ -3,22 +3,31 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Filters, Graph } from '../types'
 import { LOG_FORMAT, age, layout, parseLog } from './git'
-import { BAND_H, CELL_W, CHUNK, FOOTER, HEADER, ROW, bandSvg, footerSvg, headerSvg, messageSvg, rowsSvg } from './svg'
+import { BAND_H, CELL_W, bandSvg, graphSvg, messageSvg, visibleRows } from './svg'
 
 const PANE = 'git-graph'
 const TITLE = 'Git graph'
 const FIRST_LOAD = 100
 const STEP = 50
 const MAX_COMMITS = 2000
+/** Loads the next STEP once the window comes this close to the end. */
+const PREFETCH = 20
 const POLL_MS = 4000
 /** Pixels per row of the desktop's code font: the pane is measured in cells. */
 const CELL_H = 19
 /** Cells kept under the drawing for the refresh button. */
 const CONTROLS = 2
+/**
+ * Empty rows above and below the drawing. A desktop raises `ui.scroll` only
+ * while its own window can move, so the pane keeps one row to give either way
+ * and the scroll hook sets the window back on the drawing after every move.
+ */
+const MARGIN = 1
 /** Pixels kept beside the band for its close button, as the desktop draws it. */
 const BAND_BUTTON_W = 32
 
 const graph = atom({ plugin: 'git-graph', key: 'graph' } as const, { kind: 'idle' } as Graph)
+const offset = atom({ plugin: 'git-graph', key: 'offset' } as const, 0)
 const limit = atom({ plugin: 'git-graph', key: 'limit' } as const, FIRST_LOAD)
 const filters = atom({ plugin: 'git-graph', key: 'filters' } as const, {
   branchOnly: false,
@@ -154,10 +163,9 @@ export const register: Register = on => {
     const f = parseArgs(e.args)
     await update($, filters, () => f)
     await update($, limit, () => FIRST_LOAD)
+    await update($, offset, () => 0)
     await update($, isBandHidden, () => false)
     await $.ui.open({ id: PANE, title: TITLE })
-    // New filters, new history: back to its top. No surface, nothing to move.
-    void $.ui.scroll({ in: PANE, to: 'start' }).catch(() => undefined)
     void load($)
 
     return { text: `Grafico git aperto${describe(f)}.` }
@@ -170,13 +178,23 @@ export const register: Register = on => {
     return ran
   }).catch(($, e, next) => next(e))
 
-  // The engine scrolls the pane; near the end, the next STEP loads.
+  // The drawing moves its own rows under a fixed header and footer; the
+  // pane's window stays on the drawing, between the margins.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    const moved = await next(e)
-    if (e.offset + 2 * e.bodyRows >= e.contentRows) void loadMore($)
+    const g = await read($, graph)
+    if (g.kind !== 'ok' || e.origin.kind !== 'person') return next({ ...e, offset: MARGIN })
 
-    return moved
-  })
+    const visible = visibleFor(e.bodyRows)
+    const step =
+      Math.abs(e.by) <= 2 ? Math.sign(e.by) * 2 : Math.round((e.by * CELL_H) / 40)
+    const max = Math.max(0, g.rows.length - visible)
+    const current = Math.min(max, Math.max(0, (await read($, offset)) + step))
+    await update($, offset, () => current)
+
+    if (g.hasMore && current + visible >= g.rows.length - PREFETCH) void loadMore($)
+
+    return next({ ...e, offset: MARGIN })
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const g = await read($, graph)
@@ -220,6 +238,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const g = await read($, graph)
     const loading = await read($, isLoading)
+    const start = await read($, offset)
     const nowSeconds = Math.floor((await $.clock.now()) / 1000)
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
@@ -232,7 +251,7 @@ export const register: Register = on => {
     if (e.surface === 'terminal' || !('Svg' in ui)) {
       return (
         <Box flexDirection="column">
-          {textRows(g, nowSeconds).map(line => (
+          {textRows(g, start, Math.max(1, e.props.scroll.bodyRows - CONTROLS), nowSeconds).map(line => (
             <Text dimColor={line.dim}>{line.text}</Text>
           ))}
           {refresh}
@@ -242,48 +261,38 @@ export const register: Register = on => {
 
     const Svg = ui.Svg
     const width = Math.max(320, Math.floor(e.props.bodyColumns * CELL_W))
-
-    if (g.kind === 'ok') {
-      // The whole graph, CHUNK rows a drawing: the pane scrolls it as it is.
-      const chunks = []
-      for (let from = 0; from < g.rows.length; from += CHUNK) {
-        const to = Math.min(g.rows.length, from + CHUNK)
-        chunks.push(
-          <Svg
-            source={rowsSvg(width, g, from, to, nowSeconds)}
-            alt={`Commit da ${from + 1} a ${to}`}
-            width={width}
-            height={(to - from) * ROW}
-          />,
-        )
-      }
-
-      return (
-        <Box flexDirection="column">
-          <Svg source={headerSvg(width, g, loading)} alt={altText(g)} width={width} height={HEADER} />
-          {chunks}
-          <Svg source={footerSvg(width, g)} alt={footerText(g)} width={width} height={FOOTER} />
-          {refresh}
-        </Box>
-      )
-    }
-
     const height = Math.max(200, Math.floor((e.props.scroll.bodyRows - CONTROLS) * CELL_H))
     const frame = { width, height, nowSeconds, isLoading: loading }
+    const max = g.kind === 'ok' ? Math.max(0, g.rows.length - visibleRows(height)) : 0
     const source =
-      g.kind === 'none'
-        ? messageSvg(frame, g.cwd, 'Questa cartella non è un repository git')
-        : g.kind === 'error'
-          ? messageSvg(frame, 'errore', g.message)
-          : messageSvg(frame, 'scansione', 'Lettura del repository…')
+      g.kind === 'ok'
+        ? graphSvg(frame, g, Math.min(start, max))
+        : g.kind === 'none'
+          ? messageSvg(frame, g.cwd, 'Questa cartella non è un repository git')
+          : g.kind === 'error'
+            ? messageSvg(frame, 'errore', g.message)
+            : messageSvg(frame, 'scansione', 'Lettura del repository…')
+
+    // A window still on the top margin (the pane just opened) goes to the drawing.
+    if (e.props.scroll.offset !== MARGIN) {
+      void $.ui.scroll({ in: PANE, to: { key: 'drawing' }, block: 'start' }).catch(() => undefined)
+    }
 
     return (
       <Box flexDirection="column">
-        <Svg source={source} alt={altText(g)} width={width} height={height} />
-        {refresh}
+        <Box height={MARGIN} />
+        <Box key="drawing" flexDirection="column" height={e.props.scroll.bodyRows} overflow="hidden">
+          <Svg source={source} alt={altText(g)} width={width} height={height} />
+          {refresh}
+        </Box>
+        <Box height={MARGIN} />
       </Box>
     )
   })
+}
+
+function visibleFor(bodyRows: number): number {
+  return visibleRows(Math.max(200, Math.floor((bodyRows - CONTROLS) * CELL_H)))
 }
 
 function parseArgs(args: string): Filters {
@@ -337,17 +346,19 @@ function altText(g: Graph): string {
   return 'Lettura del repository'
 }
 
-function footerText(g: Extract<Graph, { kind: 'ok' }>): string {
-  return `${g.branches} branch, ${g.remotes} remote, ${g.tags} tag`
-}
-
-function textRows(g: Graph, nowSeconds: number): { text: string; dim: boolean }[] {
+function textRows(
+  g: Graph,
+  start: number,
+  room: number,
+  nowSeconds: number,
+): { text: string; dim: boolean }[] {
   if (g.kind === 'none') return [{ text: 'Questa cartella non è un repository git', dim: true }]
   if (g.kind === 'error') return [{ text: g.message, dim: true }]
   if (g.kind === 'idle') return [{ text: 'Lettura del repository…', dim: true }]
 
   const lines = [{ text: `git://${g.repo}  [${g.branch}]`, dim: false }]
-  for (let i = 0; i < g.rows.length; i++) {
+  const first = Math.min(start, Math.max(0, g.rows.length - (room - 1)))
+  for (let i = first; i < Math.min(g.rows.length, first + room - 1); i++) {
     const row = g.rows[i]!
     const prev = g.rows[i - 1]
     const active = new Set<number>([
