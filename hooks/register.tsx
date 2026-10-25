@@ -249,7 +249,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = ui
     const refresh = (
       <Button key="refresh" plain onPress={() => load($)}>
-        <Text dimColor>{loading ? 'Scansione…' : '↻ Aggiorna'}</Text>
+        <Text dimColor>{loading ? 'Scansione…' : '↻'}</Text>
       </Button>
     )
 
