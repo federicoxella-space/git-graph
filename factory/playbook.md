@@ -10,7 +10,7 @@
 - New Pane behaviour: follow the `ui.render` hook on `{ component: 'Pane', requestId: PANE }` in `hooks/register.tsx`.
 - Engine events: check the event's input and result in the engine `claude-code.d.ts` before relying on a field.
 - To pin a Pane's window on an element, read the offset the engine resolves for `$.ui.scroll({ to: { key } })` from the `ui.scroll` event with origin `plugin`, never a fixed row count: heights in pixels (`Svg`) have no row count known in advance.
-- The test kit drops `key` on `Svg` leaves: in tests reach them as children of a keyed `Box` or by position, not with `find({ key })`; the Pane's first `find({ type: 'Svg' })` returns a margin, not the graph.
+- The test kit drops `key` on `Svg` leaves: in tests reach them as children of a keyed `Box` or by position, not with `find({ key })`.
 
 ## Reusable code
 - Colors: `branchColor` / `authorColor` in `hooks/git.ts`, `color()` and `PALETTE` in `hooks/svg.ts`.
@@ -19,6 +19,7 @@
 ## Don'ts
 - An `Svg` `source` must stay under 131072 characters.
 - Do not commit `node_modules/` or `.claude-plugin/types/`.
+- No scroll margins or spacers shorter than one row (e.g. a pixel-high `Svg`): the engine counts heights in whole rows, so the tree no longer overflows the body and the desktop stops raising `ui.scroll` (features 001/002).
 
 ## Definition of Done
 - [gate] Build, lint and tests are green.
