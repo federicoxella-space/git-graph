@@ -120,7 +120,7 @@ test('a single lane still draws its line: the glow does not hide it', async () =
 type On = Parameters<Parameters<typeof test>[1]>[1]
 
 /** Stands for the engine and git: `log` is what `git log` prints, `isRepo` false answers "not a repository". */
-function mockRepo(on: On, log: string, isRepo = true) {
+function mockRepo(on: On, log: string | string[], isRepo = true) {
   // Hidden, the band hands the site back: this hook stands for the engine.
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -145,7 +145,12 @@ function mockRepo(on: On, log: string, isRepo = true) {
     if (args === 'remote') return out('origin\n')
     if (args.startsWith('for-each-ref'))
       return out('refs/heads/main\nrefs/heads/feature/market\nrefs/remotes/origin/main\nrefs/tags/v0.3.0\n')
-    if (args.startsWith('log')) return out(log)
+    if (args.startsWith('log')) {
+      // A list of commits honours `-n`, as git does.
+      const n = Number(/-n(\d+)/.exec(args)?.[1] ?? log.length)
+
+      return out(typeof log === 'string' ? log : log.slice(0, n).join(''))
+    }
     if (args === 'status --porcelain') return out(' M hooks/svg.ts\n?? notes.md\n')
 
     return out('', 1)
@@ -230,20 +235,30 @@ test('the band warns when the branch is behind its upstream', async () => {
 })
 
 test('the drawing splits in blocks of 50 commits with continuous lanes', async ($, on) => {
-  // 70 commits in a line: the first load shows them all, in blocks of 50 and 20.
-  const log = Array.from({ length: 70 }, (_, i) =>
-    commit(`c${String(i).padStart(3, '0')}`, i < 69 ? `c${String(i + 1).padStart(3, '0')}` : '', i === 0 ? 'HEAD -> main' : '', `Commit ${i}`),
-  ).join('')
-  mockRepo(on, log)
+  // 120 commits in a line; the mock honours `-n`, so the first load gives 100 and the
+  // desktop scroll near the end loads the other 20.
+  const all = Array.from({ length: 120 }, (_, i) =>
+    commit(`c${String(i).padStart(3, '0')}`, i < 119 ? `c${String(i + 1).padStart(3, '0')}` : '', i === 0 ? 'HEAD -> main' : '', `Commit ${i}`),
+  )
+  mockRepo(on, all, true)
+  // The engine's answer to the wheel: the window lands where the event asked.
+  on('ui.scroll', (_, e) => ({ offset: e.offset }))
 
   await $.session.start({ cwd: '/work/fantasy', surface: 'desktop', isInteractive: true })
   await $.command.run({ command: 'gitgraph', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const heights = async () =>
+    (((await desktop.find({ key: 'drawing' }))?.children ?? []) as { props: Record<string, unknown> }[]).map(b => b.props.height)
+  expect(await heights()).toEqual([2000, 2000])
+
+  await $.ui.scroll({
+    component: 'Pane', requestId: 'git-graph', offset: 150, by: 10, bodyRows: 30, origin: { kind: 'person' },
+  } as never)
+  // loadMore runs in the background: wait for the rescan.
+  for (let i = 0; i < 50 && (await heights()).length < 3; i++) await new Promise(r => setTimeout(r, 20))
+  expect(await heights()).toEqual([2000, 2000, 800])
   const blocks = ((await desktop.find({ key: 'drawing' }))?.children ?? []) as { props: Record<string, unknown> }[]
-  expect(blocks.map(b => b.props.height)).toEqual([2000, 800])
-  expect(String(blocks[0]!.props.source)).not.toContain('M32 -20V20')
-  // The second block starts with the segments of row 49, at negative y.
   expect(String(blocks[1]!.props.source)).toContain('<path d="M32 -20V20"')
   await desktop.unmount()
 })
