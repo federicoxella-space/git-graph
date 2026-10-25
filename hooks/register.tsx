@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Filters, Graph } from '../types'
 import { LOG_FORMAT, age, layout, parseLog } from './git'
-import { BAND_H, CELL_W, bandSvg, blankSvg, graphSvg, messageSvg, visibleRows } from './svg'
+import { BAND_H, CELL_W, bandSvg, graphSvg, messageSvg, visibleRows } from './svg'
 
 const PANE = 'git-graph'
 const TITLE = 'Git graph'
@@ -18,13 +18,13 @@ const CELL_H = 19
 /** Cells kept under the drawing for the refresh button. */
 const CONTROLS = 2
 /**
- * Height in pixels (not rows) of the blank strip above and below the drawing.
- * A desktop raises `ui.scroll` only while its own window can move, so the pane
- * keeps a strip to give either way and the scroll hook sets the window back on
- * the drawing after every move. If scrolling stops arriving in the app, raise
- * it to 3, 4, ...
+ * Height in whole rows of the blank margin above and below the drawing.
+ * The engine counts content height in whole rows, so a margin under one row adds
+ * no scroll space: the content would not outgrow the pane body and the desktop
+ * would stop raising `ui.scroll`. The scroll hook sets the window back on the
+ * drawing after every move.
  */
-const MARGIN_PX = 2
+const MARGIN = 1
 /** Pixels kept beside the band for its close button, as the desktop draws it. */
 const BAND_BUTTON_W = 32
 
@@ -291,12 +291,12 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Svg key="margin-top" source={blankSvg(width, MARGIN_PX)} alt="" width={width} height={MARGIN_PX} />
+        <Box key="margin-top" height={MARGIN} />
         <Box key="drawing" flexDirection="column" height={e.props.scroll.bodyRows} overflow="hidden">
           <Svg source={source} alt={altText(g)} width={width} height={height} />
           {refresh}
         </Box>
-        <Svg key="margin-bottom" source={blankSvg(width, MARGIN_PX)} alt="" width={width} height={MARGIN_PX} />
+        <Box key="margin-bottom" height={MARGIN} />
       </Box>
     )
   })

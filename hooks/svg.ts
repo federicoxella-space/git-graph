@@ -93,11 +93,6 @@ function header(W: number, title: string, branch: string | null, sync: string): 
   return out
 }
 
-/** An empty, transparent SVG of the given size, used as a pixel-high margin. */
-export function blankSvg(width: number, height: number): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"/>`
-}
-
 /** A centered message in place of the rows: no repo, an error, the first scan. */
 export function messageSvg(frame: Frame, title: string, message: string): string {
   const mid = HEADER + (frame.height - HEADER - FOOTER) / 2
