@@ -3,7 +3,6 @@ import { age, branchColor } from './git'
 
 export const ROW = 40
 export const HEADER = 56
-export const FOOTER = 48
 const LANE = 24
 const LANE0 = 32
 const CHAR = 7.8
@@ -34,8 +33,15 @@ const TAG: [string, string] = ['#E7C9A0', '#F5E6D3']
 
 const color = (lane: number): [string, string] => PALETTE[lane % PALETTE.length] ?? PALETTE[0]!
 
-export function visibleRows(height: number): number {
-  return Math.max(1, Math.floor((height - HEADER - FOOTER) / ROW))
+/** Pixels per row of the desktop's code font: the pane is measured in cells. */
+export const CELL_H = 19
+
+/**
+ * The last commit row the native window reaches, given the pane's scroll offset
+ * and body rows (both in cells). The header takes the first HEADER pixels.
+ */
+export function lastVisibleRow(offset: number, bodyRows: number): number {
+  return Math.floor(((offset + bodyRows) * CELL_H - HEADER) / ROW)
 }
 
 const esc = (text: string): string =>
@@ -46,11 +52,8 @@ const cut = (text: string, chars: number): string =>
 
 const n = (value: number): string => String(Math.round(value * 10) / 10)
 
-type Frame = { width: number; height: number; nowSeconds: number; isLoading: boolean }
-
-function shell(frame: Frame, body: string): string {
-  const { width: W, height: H } = frame
-
+/** Wraps a drawing in an svg element with the shared styles and the glow filter. */
+function shell(W: number, H: number, body: string): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
     `<style>text{font-family:ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace}` +
@@ -60,15 +63,13 @@ function shell(frame: Frame, body: string): string {
     // group of vertical lines alone (one lane) has width 0 and draws nothing.
     `<defs><filter id="g" filterUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><feGaussianBlur stdDeviation="2.2" result="b"/>` +
     `<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
-    `<polygon id="hx" points="0,-7 6.06,-3.5 6.06,3.5 0,7 -6.06,3.5 -6.06,-3.5"/>` +
-    `<clipPath id="rows"><rect x="0" y="${HEADER}" width="${W}" height="${H - HEADER - FOOTER}"/></clipPath></defs>` +
+    `<polygon id="hx" points="0,-7 6.06,-3.5 6.06,3.5 0,7 -6.06,3.5 -6.06,-3.5"/></defs>` +
     body +
-    `<line x1="24" y1="${H - FOOTER + 0.5}" x2="${W - 24}" y2="${H - FOOTER + 0.5}" stroke="${LINE}"/>` +
     `</svg>`
   )
 }
 
-function header(W: number, title: string, branch: string | null, sync: string): string {
+function headerBody(W: number, title: string, branch: string | null, sync: string): string {
   let out = `<text x="32" y="33" fill="#F59E0B" font-size="12" filter="url(#g)">◢</text>`
   let right = W - 24
   out += `<text x="${right}" y="34" fill="#C9B79C" font-size="11" text-anchor="end">${esc(sync)}</text>`
@@ -93,34 +94,44 @@ function header(W: number, title: string, branch: string | null, sync: string): 
   return out
 }
 
-/** A centered message in place of the rows: no repo, an error, the first scan. */
-export function messageSvg(frame: Frame, title: string, message: string): string {
-  const mid = HEADER + (frame.height - HEADER - FOOTER) / 2
+/** The pane's top strip: repository, branch and sync, HEADER pixels high. */
+export function headerSvg(width: number, title: string, branch: string | null, sync: string): string {
+  return shell(width, HEADER, headerBody(width, title, branch, sync))
+}
 
+/** A centered message in place of the rows: no repo, an error, the first scan. */
+export function messageSvg(width: number, message: string): string {
   return shell(
-    frame,
-    header(frame.width, title, null, '') +
-      `<text x="${frame.width / 2}" y="${mid}" class="m" text-anchor="middle" fill-opacity="0.8">${esc(
-        cut(message, Math.floor((frame.width - 48) / CHAR)),
-      )}</text>`,
+    width,
+    2 * ROW,
+    `<text x="${width / 2}" y="${ROW}" class="m" text-anchor="middle" fill-opacity="0.8">${esc(
+      cut(message, Math.floor((width - 48) / CHAR)),
+    )}</text>`,
   )
 }
 
 type Ok = Extract<Graph, { kind: 'ok' }>
 
-export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
-  const { width: W, height: H } = frame
-  const visible = visibleRows(H)
+/**
+ * One block of the drawing: commits [start, end) of the loaded rows, each ROW
+ * pixels high, row i centered at y = (i - start) * ROW + ROW / 2. The segments of
+ * row start - 1 are drawn too (at negative y, cut by the viewBox) so lane lines
+ * stay continuous between blocks.
+ */
+export function graphSvg(width: number, graph: Ok, start: number, end: number, nowSeconds: number): string {
+  const W = width
   const rows = graph.rows
-  const first = Math.max(0, offset - 1)
-  const last = Math.min(rows.length - 1, offset + visible)
-  const y = (i: number) => HEADER + (i - offset) * ROW + ROW / 2
+  const last = Math.min(rows.length, end)
+  const H = (last - start) * ROW
+  const first = Math.max(0, start - 1)
+  const y = (i: number) => (i - start) * ROW + ROW / 2
   const x = (lane: number) => LANE0 + lane * LANE
 
+  // The widest lane over every loaded commit: the hash column lines up in all blocks.
   let widest = 0
-  for (let i = first; i <= last; i++) {
-    const row = rows[i]!
-    widest = Math.max(widest, row.lane, ...row.segs.flatMap(([a, b]) => [a, b]))
+  for (const row of rows) {
+    widest = Math.max(widest, row.lane)
+    for (const [a, b] of row.segs) widest = Math.max(widest, a, b)
   }
   const hashX = Math.max(84, x(widest) + 28)
   const msgX = hashX + 86
@@ -132,7 +143,7 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
   let text = ''
   let seps = ''
 
-  for (let i = first; i <= last; i++) {
+  for (let i = first; i < last; i++) {
     const row = rows[i]!
     const y1 = y(i)
     const y2 = y1 + ROW
@@ -148,7 +159,7 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
       lines += `<path d="${d}" stroke="${stroke}"/>`
     }
 
-    if (i < offset || i >= offset + visible) continue
+    if (i < start) continue
 
     const [stroke, light] = color(row.color)
     const isHead = row.refs.some(r => r.kind === 'head')
@@ -183,44 +194,15 @@ export function graphSvg(frame: Frame, graph: Ok, offset: number): string {
     text +=
       `<rect x="${authorX}" y="${y1 - 10}" width="26" height="20" rx="2" fill="${own}" fill-opacity="0.14" stroke="${own}" stroke-opacity="0.6"/>` +
       `<text x="${authorX + 13}" y="${ty}" fill="${ownLight}" class="b">${esc(row.initials)}</text>` +
-      `<text x="${timeX}" y="${ty}" class="d" text-anchor="end">${age(row.time, frame.nowSeconds)}</text>`
+      `<text x="${timeX}" y="${ty}" class="d" text-anchor="end">${age(row.time, nowSeconds)}</text>`
 
-    if (i < offset + visible - 1 && i < rows.length - 1) {
+    // A separator under the row, unless it is the block's last or the final commit.
+    if (i < last - 1) {
       seps += `<line x1="${hashX - 8}" y1="${y2 - ROW / 2}" x2="${W - 24}" y2="${y2 - ROW / 2}" class="sep"/>`
     }
   }
 
-  const area = H - HEADER - FOOTER
-  const total = rows.length + (graph.hasMore ? 50 : 0)
-  let scrollbar = ''
-  if (total > visible) {
-    const track = area - 16
-    const thumb = Math.max(18, (track * visible) / total)
-    const top = HEADER + 8 + ((track - thumb) * offset) / Math.max(1, total - visible)
-    scrollbar =
-      `<rect x="${W - 9}" y="${HEADER + 8}" width="2" height="${track}" rx="1" fill="#332E2B"/>` +
-      `<rect x="${W - 9.5}" y="${n(top)}" width="3" height="${n(thumb)}" rx="1.5" fill="#F59E0B" filter="url(#g)"/>`
-  }
-
-  const sync = frame.isLoading
-    ? 'SYNC…'
-    : graph.ahead === null || graph.behind === null
-      ? '—'
-      : `↑${graph.ahead} ↓${graph.behind}`
-  const fy = H - FOOTER / 2 + 4
-  const pad = (v: number) => String(v).padStart(2, '0')
-  const footer =
-    `<text x="${n(W * 0.2)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#F59E0B">${pad(graph.branches)}</tspan> BRANCH</text>` +
-    `<text x="${n(W * 0.5)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="#F43F5E">${pad(graph.remotes)}</tspan> REMOTE</text>` +
-    `<text x="${n(W * 0.8)}" y="${fy}" class="d" text-anchor="middle"><tspan fill="${TAG[0]}">${pad(graph.tags)}</tspan> TAG</text>`
-
-  return shell(
-    frame,
-    header(W, graph.repo, graph.branch, sync) +
-      `<g clip-path="url(#rows)">${seps}<g filter="url(#g)" fill="none" stroke-width="2">${lines}</g>${nodes}${text}</g>` +
-      scrollbar +
-      footer,
-  )
+  return shell(W, H, `${seps}<g filter="url(#g)" fill="none" stroke-width="2">${lines}</g>${nodes}${text}`)
 }
 
 function refBadge(

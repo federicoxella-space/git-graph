@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Filters, Graph } from '../types'
 import { LOG_FORMAT, age, layout, parseLog } from './git'
-import { BAND_H, CELL_W, bandSvg, graphSvg, messageSvg, visibleRows } from './svg'
+import { BAND_H, CELL_H, CELL_W, HEADER, ROW, bandSvg, graphSvg, headerSvg, lastVisibleRow, messageSvg } from './svg'
 
 const PANE = 'git-graph'
 const TITLE = 'Git graph'
@@ -13,18 +13,12 @@ const MAX_COMMITS = 2000
 /** Loads the next STEP once the window comes this close to the end. */
 const PREFETCH = 20
 const POLL_MS = 4000
-/** Pixels per row of the desktop's code font: the pane is measured in cells. */
-const CELL_H = 19
 /** Cells kept under the drawing for the refresh button. */
 const CONTROLS = 2
-/**
- * Height in whole rows of the blank margin above and below the drawing.
- * The engine counts content height in whole rows, so a margin under one row adds
- * no scroll space: the content would not outgrow the pane body and the desktop
- * would stop raising `ui.scroll`. The scroll hook sets the window back on the
- * drawing after every move.
- */
-const MARGIN = 1
+/** Commits per stacked Svg: keeps every `source` far under the 131072 characters limit. */
+const CHUNK = 50
+/** Pixels kept beside the header for the refresh button. */
+const REFRESH_W = 96
 /** Pixels kept beside the band for its close button, as the desktop draws it. */
 const BAND_BUTTON_W = 32
 
@@ -45,8 +39,8 @@ type $ = EngineInterface
 let running: Promise<void> | null = null
 let again = false
 let signature = ''
-/** The drawing's window offset as the engine resolves it; null until the first `$.ui.scroll` lands. */
-let pinned: number | null = null
+/** Whether the last Pane render drew Svg elements (desktop) rather than text rows. */
+let isDesktop = false
 
 function load($: $): Promise<void> {
   if (running !== null) {
@@ -182,20 +176,20 @@ export const register: Register = on => {
     return ran
   }).catch(($, e, next) => next(e))
 
-  // The drawing moves its own rows under a fixed header and footer; the
-  // pane's window stays on the drawing, between the margins.
+  // Desktop: the pane scrolls the drawing natively, the hook only prefetches.
+  // Terminal: the wheel moves the `offset` atom, which picks the text rows.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    // Our own `$.ui.scroll` to the drawing: remember the offset the engine resolved.
-    if (e.origin.kind === 'plugin' && e.origin.name === 'git-graph') {
-      pinned = e.offset
+    const g = await read($, graph)
+    if (g.kind !== 'ok') return next(e)
+
+    if (isDesktop) {
+      if (g.hasMore && lastVisibleRow(e.offset, e.bodyRows) >= g.rows.length - PREFETCH) void loadMore($)
 
       return next(e)
     }
 
-    const g = await read($, graph)
-    if (g.kind !== 'ok' || e.origin.kind !== 'person') return next({ ...e, offset: pinned ?? e.offset })
-
-    const visible = visibleFor(e.bodyRows)
+    if (e.origin.kind !== 'person') return next(e)
+    const visible = Math.max(1, e.bodyRows - CONTROLS) - 1
     const step =
       Math.abs(e.by) <= 2 ? Math.sign(e.by) * 2 : Math.round((e.by * CELL_H) / 40)
     const max = Math.max(0, g.rows.length - visible)
@@ -204,7 +198,7 @@ export const register: Register = on => {
 
     if (g.hasMore && current + visible >= g.rows.length - PREFETCH) void loadMore($)
 
-    return next({ ...e, offset: pinned ?? e.offset })
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -259,7 +253,8 @@ export const register: Register = on => {
       </Button>
     )
 
-    if (e.surface === 'terminal' || !('Svg' in ui)) {
+    isDesktop = e.surface !== 'terminal' && 'Svg' in ui
+    if (!isDesktop) {
       return (
         <Box flexDirection="column">
           {textRows(g, start, Math.max(1, e.props.scroll.bodyRows - CONTROLS), nowSeconds).map(line => (
@@ -272,38 +267,62 @@ export const register: Register = on => {
 
     const Svg = ui.Svg
     const width = Math.max(320, Math.floor(e.props.bodyColumns * CELL_W))
-    const height = Math.max(200, Math.floor((e.props.scroll.bodyRows - CONTROLS) * CELL_H))
-    const frame = { width, height, nowSeconds, isLoading: loading }
-    const max = g.kind === 'ok' ? Math.max(0, g.rows.length - visibleRows(height)) : 0
-    const source =
-      g.kind === 'ok'
-        ? graphSvg(frame, g, Math.min(start, max))
-        : g.kind === 'none'
-          ? messageSvg(frame, g.cwd, 'Questa cartella non è un repository git')
-          : g.kind === 'error'
-            ? messageSvg(frame, 'errore', g.message)
-            : messageSvg(frame, 'scansione', 'Lettura del repository…')
+    const sync =
+      g.kind !== 'ok' || loading
+        ? loading
+          ? 'SYNC…'
+          : ''
+        : g.ahead === null || g.behind === null
+          ? '—'
+          : `↑${g.ahead} ↓${g.behind}`
+    const title = g.kind === 'ok' ? g.repo : g.kind === 'none' ? g.cwd : g.kind === 'error' ? 'errore' : 'scansione'
+    const top = headerSvg(width - REFRESH_W, title, g.kind === 'ok' ? g.branch : null, sync)
 
-    // A window off the drawing (the pane just opened) goes to the drawing.
-    if (pinned === null || e.props.scroll.offset !== pinned) {
-      void $.ui.scroll({ in: PANE, to: { key: 'drawing' }, block: 'start' }).catch(() => undefined)
-    }
+    const blocks =
+      g.kind === 'ok'
+        ? Array.from({ length: Math.ceil(g.rows.length / CHUNK) }, (_, k) => {
+            const start = k * CHUNK
+            const end = Math.min(g.rows.length, start + CHUNK)
+
+            return (
+              <Svg
+                source={graphSvg(width, g, start, end, nowSeconds)}
+                alt={start === 0 ? altText(g) : `Commit ${start + 1}-${end}`}
+                width={width}
+                height={(end - start) * ROW}
+              />
+            )
+          })
+        : [
+            <Svg
+              source={messageSvg(
+                width,
+                g.kind === 'none'
+                  ? 'Questa cartella non è un repository git'
+                  : g.kind === 'error'
+                    ? g.message
+                    : 'Lettura del repository…',
+              )}
+              alt={altText(g)}
+              width={width}
+              height={2 * ROW}
+            />,
+          ]
 
     return (
       <Box flexDirection="column">
-        <Box key="margin-top" height={MARGIN} />
-        <Box key="drawing" flexDirection="column" height={e.props.scroll.bodyRows} overflow="hidden">
-          <Svg source={source} alt={altText(g)} width={width} height={height} />
-          {refresh}
+        <Box key="top" flexDirection="row" alignItems="stretch">
+          <Svg source={top} alt={altText(g)} width={width - REFRESH_W} height={HEADER} />
+          <Box flexDirection="column" justifyContent="center" alignItems="center" flexGrow={1}>
+            {refresh}
+          </Box>
         </Box>
-        <Box key="margin-bottom" height={MARGIN} />
+        <Box key="drawing" flexDirection="column">
+          {blocks}
+        </Box>
       </Box>
     )
   })
-}
-
-function visibleFor(bodyRows: number): number {
-  return visibleRows(Math.max(200, Math.floor((bodyRows - CONTROLS) * CELL_H)))
 }
 
 function parseArgs(args: string): Filters {
