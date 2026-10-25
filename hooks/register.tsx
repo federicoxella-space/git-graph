@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Filters, Graph } from '../types'
 import { LOG_FORMAT, age, layout, parseLog } from './git'
-import { BAND_H, CELL_W, bandSvg, graphSvg, messageSvg, visibleRows } from './svg'
+import { BAND_H, CELL_W, bandSvg, blankSvg, graphSvg, messageSvg, visibleRows } from './svg'
 
 const PANE = 'git-graph'
 const TITLE = 'Git graph'
@@ -18,11 +18,13 @@ const CELL_H = 19
 /** Cells kept under the drawing for the refresh button. */
 const CONTROLS = 2
 /**
- * Empty rows above and below the drawing. A desktop raises `ui.scroll` only
- * while its own window can move, so the pane keeps one row to give either way
- * and the scroll hook sets the window back on the drawing after every move.
+ * Height in pixels (not rows) of the blank strip above and below the drawing.
+ * A desktop raises `ui.scroll` only while its own window can move, so the pane
+ * keeps a strip to give either way and the scroll hook sets the window back on
+ * the drawing after every move. If scrolling stops arriving in the app, raise
+ * it to 3, 4, ...
  */
-const MARGIN = 1
+const MARGIN_PX = 2
 /** Pixels kept beside the band for its close button, as the desktop draws it. */
 const BAND_BUTTON_W = 32
 
@@ -43,6 +45,8 @@ type $ = EngineInterface
 let running: Promise<void> | null = null
 let again = false
 let signature = ''
+/** The drawing's window offset as the engine resolves it; null until the first `$.ui.scroll` lands. */
+let pinned: number | null = null
 
 function load($: $): Promise<void> {
   if (running !== null) {
@@ -181,8 +185,15 @@ export const register: Register = on => {
   // The drawing moves its own rows under a fixed header and footer; the
   // pane's window stays on the drawing, between the margins.
   on('ui.scroll', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    // Our own `$.ui.scroll` to the drawing: remember the offset the engine resolved.
+    if (e.origin.kind === 'plugin' && e.origin.name === 'git-graph') {
+      pinned = e.offset
+
+      return next(e)
+    }
+
     const g = await read($, graph)
-    if (g.kind !== 'ok' || e.origin.kind !== 'person') return next({ ...e, offset: MARGIN })
+    if (g.kind !== 'ok' || e.origin.kind !== 'person') return next({ ...e, offset: pinned ?? e.offset })
 
     const visible = visibleFor(e.bodyRows)
     const step =
@@ -193,7 +204,7 @@ export const register: Register = on => {
 
     if (g.hasMore && current + visible >= g.rows.length - PREFETCH) void loadMore($)
 
-    return next({ ...e, offset: MARGIN })
+    return next({ ...e, offset: pinned ?? e.offset })
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -273,19 +284,19 @@ export const register: Register = on => {
             ? messageSvg(frame, 'errore', g.message)
             : messageSvg(frame, 'scansione', 'Lettura del repository…')
 
-    // A window still on the top margin (the pane just opened) goes to the drawing.
-    if (e.props.scroll.offset !== MARGIN) {
+    // A window off the drawing (the pane just opened) goes to the drawing.
+    if (pinned === null || e.props.scroll.offset !== pinned) {
       void $.ui.scroll({ in: PANE, to: { key: 'drawing' }, block: 'start' }).catch(() => undefined)
     }
 
     return (
       <Box flexDirection="column">
-        <Box height={MARGIN} />
+        <Svg key="margin-top" source={blankSvg(width, MARGIN_PX)} alt="" width={width} height={MARGIN_PX} />
         <Box key="drawing" flexDirection="column" height={e.props.scroll.bodyRows} overflow="hidden">
           <Svg source={source} alt={altText(g)} width={width} height={height} />
           {refresh}
         </Box>
-        <Box height={MARGIN} />
+        <Svg key="margin-bottom" source={blankSvg(width, MARGIN_PX)} alt="" width={width} height={MARGIN_PX} />
       </Box>
     )
   })

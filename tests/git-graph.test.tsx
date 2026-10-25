@@ -156,14 +156,23 @@ test('the pane draws the repository on every surface', async ($, on) => {
   })
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const svg = await desktop.find({ type: 'Svg' })
+  const drawing = await desktop.find({ key: 'drawing' })
+  const svg = drawing?.children[0] as { props: Record<string, unknown> } | undefined
   expect(svg?.props.alt).toBe('Grafico git di fantasy-socioeconomic-simulator-2.0, branch main, 7 commit caricati')
   const source = String(svg?.props.source)
   expect(source).toContain('a3f9c21')
   expect(source).toContain('v0.3.0')
   expect(source.length).toBeLessThan(131072)
-  // The drawing fills the body, a margin row either side gives the window room to move.
-  expect((await desktop.find({ key: 'drawing' }))?.props.height).toBe(30)
+  // The drawing fills the body, a 2 px blank Svg either side gives the window room to move.
+  expect(drawing?.props.height).toBe(30)
+  // A leaf's key does not reach the tree: the margins are the root's first and last children.
+  const root = await desktop.find({ type: 'Box' })
+  const margins = [root?.children[0], root?.children[2]] as { type: string; props: Record<string, unknown> }[]
+  for (const margin of margins) {
+    expect(margin.type).toBe('Svg')
+    expect(margin.props.height).toBe(2)
+    expect(margin.props.alt).toBe('')
+  }
   await desktop.unmount()
 
   const BAND = {
@@ -184,6 +193,8 @@ test('the pane draws the repository on every surface', async ($, on) => {
 
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await terminal.find({ type: 'Text', text: /a3f9c21/ }))?.text).toContain('Fix calcolo tasse')
+  expect((await terminal.find({ type: 'Box' }))?.children[0]).not.toMatchObject({ type: 'Svg' })
+  expect(await terminal.find({ type: 'Svg' })).toBeUndefined()
   await terminal.unmount()
 })
 

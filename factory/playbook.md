@@ -9,6 +9,8 @@
 ## Patterns
 - New Pane behaviour: follow the `ui.render` hook on `{ component: 'Pane', requestId: PANE }` in `hooks/register.tsx`.
 - Engine events: check the event's input and result in the engine `claude-code.d.ts` before relying on a field.
+- To pin a Pane's window on an element, read the offset the engine resolves for `$.ui.scroll({ to: { key } })` from the `ui.scroll` event with origin `plugin`, never a fixed row count: heights in pixels (`Svg`) have no row count known in advance.
+- The test kit drops `key` on `Svg` leaves: in tests reach them as children of a keyed `Box` or by position, not with `find({ key })`; the Pane's first `find({ type: 'Svg' })` returns a margin, not the graph.
 
 ## Reusable code
 - Colors: `branchColor` / `authorColor` in `hooks/git.ts`, `color()` and `PALETTE` in `hooks/svg.ts`.
